@@ -1,5 +1,5 @@
 // smartquote_backend/index.ts
-
+import cors from 'cors';
 import express, { Request, Response } from 'express'; // <--- Dodaj typy Request i Response
 import dotenv from 'dotenv';
 
@@ -32,3 +32,10 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
     console.log(`✅ Serwer backendu działa na porcie ${PORT}`);
 });
+
+// Konfiguracja CORS
+app.use(cors({
+    origin: process.env.CLIENT_URL || "http://localhost:3000", // Pozwoli na dostęp z Netlify lub lokalnie
+    credentials: true, // Ważne dla sesji/ciasteczek
+    methods: ["GET", "POST", "PUT", "DELETE"]
+}));
