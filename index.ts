@@ -1,22 +1,32 @@
 // smartquote_backend/index.ts
 import cors from 'cors';
-import express, { Request, Response } from 'express'; // <--- Dodaj typy Request i Response
+import express, { Request, Response } from 'express';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Poprawne typowanie aplikacji Express:
 const app = express();
 
+// --- SEKCJA MIDDLEWARE (To musi być pierwsze!) ---
+
+// 1. Najpierw CORS
+app.use(cors({
+    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE"]
+}));
+
+// 2. Potem parsowanie JSON
 app.use(express.json());
 
-// Użycie generycznych typów Request i Response:
+// --- SEKCJA ROUTINGU ---
+
 app.post('/api/auth/login', (req: Request, res: Response) => {
-    // TypeScript teraz wie, co to jest 'req' i 'res'
     const { email, password } = req.body;
 
     console.log(`Odebrano żądanie logowania dla: ${email}`);
 
+    // Prosta weryfikacja "na sztywno" dla testów
     if (email === "test@smartquote.pl" && password === "secret") {
         return res.json({
             id: 'user_123',
@@ -32,10 +42,3 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
     console.log(`✅ Serwer backendu działa na porcie ${PORT}`);
 });
-
-// Konfiguracja CORS
-app.use(cors({
-    origin: process.env.CLIENT_URL || "http://localhost:3000", // Pozwoli na dostęp z Netlify lub lokalnie
-    credentials: true, // Ważne dla sesji/ciasteczek
-    methods: ["GET", "POST", "PUT", "DELETE"]
-}));
