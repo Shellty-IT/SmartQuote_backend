@@ -1,18 +1,15 @@
 // smartquote_backend/src/types/index.ts
 
-import { User } from '@prisma/client';
+import { Request } from 'express';
 
 // Rozszerzenie Express Request o user
-declare global {
-    namespace Express {
-        interface Request {
-            user?: {
-                id: string;
-                email: string;
-                role: string;
-            };
-        }
-    }
+export interface AuthenticatedRequest extends Request {
+    user?: {
+        id: string;
+        email: string;
+        name: string | null;
+        role: string;
+    };
 }
 
 // Typy dla Contract
@@ -64,5 +61,7 @@ export interface GetContractsParams {
     search?: string;
 }
 
-// Eksport pustego obiektu dla modułu
-export {};
+// Typy dla Follow-up
+export type FollowUpTypeValue = 'CALL' | 'EMAIL' | 'MEETING' | 'TASK' | 'REMINDER' | 'OTHER';
+export type FollowUpStatusValue = 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'OVERDUE';
+export type PriorityValue = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
