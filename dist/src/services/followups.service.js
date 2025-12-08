@@ -176,10 +176,10 @@ exports.followUpsService = {
                     dueDate: data.dueDate,
                     notes: data.notes,
                     status: 'PENDING',
-                    user: { connect: { id: userId } },
-                    client: data.clientId ? { connect: { id: data.clientId } } : undefined,
-                    offer: data.offerId ? { connect: { id: data.offerId } } : undefined,
-                    contract: data.contractId ? { connect: { id: data.contractId } } : undefined,
+                    userId: userId,
+                    clientId: data.clientId || null,
+                    offerId: data.offerId || null,
+                    contractId: data.contractId || null,
                 },
                 include: followUpInclude,
             });
@@ -370,19 +370,16 @@ exports.followUpsService = {
             let completed = 0;
             for (const followUp of allFollowUps) {
                 // Status
-                const statusKey = followUp.status;
-                if (stats.byStatus[statusKey] !== undefined) {
-                    stats.byStatus[statusKey]++;
+                if (stats.byStatus[followUp.status] !== undefined) {
+                    stats.byStatus[followUp.status]++;
                 }
                 // Type
-                const typeKey = followUp.type;
-                if (stats.byType[typeKey] !== undefined) {
-                    stats.byType[typeKey]++;
+                if (stats.byType[followUp.type] !== undefined) {
+                    stats.byType[followUp.type]++;
                 }
                 // Priority
-                const priorityKey = followUp.priority;
-                if (stats.byPriority[priorityKey] !== undefined) {
-                    stats.byPriority[priorityKey]++;
+                if (stats.byPriority[followUp.priority] !== undefined) {
+                    stats.byPriority[followUp.priority]++;
                 }
                 // Przeterminowane (PENDING i po terminie)
                 if (followUp.status === 'PENDING' && followUp.dueDate < now) {

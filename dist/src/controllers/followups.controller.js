@@ -16,6 +16,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.followUpsController = void 0;
 const followups_service_1 = __importDefault(require("../services/followups.service"));
 const apiResponse_1 = require("../utils/apiResponse");
+// Stałe do walidacji
+const VALID_STATUSES = ['PENDING', 'COMPLETED', 'CANCELLED', 'OVERDUE'];
+const VALID_TYPES = ['CALL', 'EMAIL', 'MEETING', 'TASK', 'REMINDER', 'OTHER'];
+const VALID_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
 exports.followUpsController = {
     /**
      * GET /followups
@@ -28,20 +32,17 @@ exports.followUpsController = {
                 const statusParam = req.query.status;
                 const typeParam = req.query.type;
                 const priorityParam = req.query.priority;
-                const validStatuses = ['PENDING', 'COMPLETED', 'CANCELLED', 'OVERDUE'];
-                const validTypes = ['CALL', 'EMAIL', 'MEETING', 'TASK', 'REMINDER', 'OTHER'];
-                const validPriorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
                 const query = {
                     page: req.query.page ? parseInt(req.query.page) : 1,
                     limit: req.query.limit ? parseInt(req.query.limit) : 10,
                     search: req.query.search,
-                    status: statusParam && validStatuses.includes(statusParam)
+                    status: statusParam && VALID_STATUSES.includes(statusParam)
                         ? statusParam
                         : undefined,
-                    type: typeParam && validTypes.includes(typeParam)
+                    type: typeParam && VALID_TYPES.includes(typeParam)
                         ? typeParam
                         : undefined,
-                    priority: priorityParam && validPriorities.includes(priorityParam)
+                    priority: priorityParam && VALID_PRIORITIES.includes(priorityParam)
                         ? priorityParam
                         : undefined,
                     clientId: req.query.clientId,

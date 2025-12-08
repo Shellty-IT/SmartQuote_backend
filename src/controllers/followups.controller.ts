@@ -1,10 +1,15 @@
 // src/controllers/followups.controller.ts
 
 import { Response, NextFunction } from 'express';
-import { AuthenticatedRequest, FollowUpStatusValue, FollowUpTypeValue, PriorityValue } from '../types';
+import { FollowUpType, FollowUpStatus, Priority } from '@prisma/client';
+import { AuthenticatedRequest } from '../types';
 import followUpsService from '../services/followups.service';
 import { successResponse, errorResponse, paginatedResponse } from '../utils/apiResponse';
-import { FollowUpStatus } from '@prisma/client';
+
+// Stałe do walidacji
+const VALID_STATUSES: FollowUpStatus[] = ['PENDING', 'COMPLETED', 'CANCELLED', 'OVERDUE'];
+const VALID_TYPES: FollowUpType[] = ['CALL', 'EMAIL', 'MEETING', 'TASK', 'REMINDER', 'OTHER'];
+const VALID_PRIORITIES: Priority[] = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
 
 export const followUpsController = {
     /**
@@ -19,22 +24,18 @@ export const followUpsController = {
             const typeParam = req.query.type as string | undefined;
             const priorityParam = req.query.priority as string | undefined;
 
-            const validStatuses: FollowUpStatusValue[] = ['PENDING', 'COMPLETED', 'CANCELLED', 'OVERDUE'];
-            const validTypes: FollowUpTypeValue[] = ['CALL', 'EMAIL', 'MEETING', 'TASK', 'REMINDER', 'OTHER'];
-            const validPriorities: PriorityValue[] = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
-
             const query = {
                 page: req.query.page ? parseInt(req.query.page as string) : 1,
                 limit: req.query.limit ? parseInt(req.query.limit as string) : 10,
                 search: req.query.search as string | undefined,
-                status: statusParam && validStatuses.includes(statusParam as FollowUpStatusValue)
-                    ? statusParam as FollowUpStatusValue
+                status: statusParam && VALID_STATUSES.includes(statusParam as FollowUpStatus)
+                    ? statusParam as FollowUpStatus
                     : undefined,
-                type: typeParam && validTypes.includes(typeParam as FollowUpTypeValue)
-                    ? typeParam as FollowUpTypeValue
+                type: typeParam && VALID_TYPES.includes(typeParam as FollowUpType)
+                    ? typeParam as FollowUpType
                     : undefined,
-                priority: priorityParam && validPriorities.includes(priorityParam as PriorityValue)
-                    ? priorityParam as PriorityValue
+                priority: priorityParam && VALID_PRIORITIES.includes(priorityParam as Priority)
+                    ? priorityParam as Priority
                     : undefined,
                 clientId: req.query.clientId as string | undefined,
                 offerId: req.query.offerId as string | undefined,

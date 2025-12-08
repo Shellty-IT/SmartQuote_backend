@@ -1,19 +1,14 @@
 // src/services/followups.service.ts
 
-import { Prisma, FollowUpStatus } from '@prisma/client';
+import { Prisma, FollowUpStatus, FollowUpType, Priority } from '@prisma/client';
 import prisma from '../lib/prisma';
-import {
-    FollowUpTypeValue,
-    FollowUpStatusValue,
-    PriorityValue
-} from '../types';
 
 // Interfejsy dla danych wejściowych
 export interface CreateFollowUpData {
     title: string;
     description?: string | null;
-    type: FollowUpTypeValue;
-    priority?: PriorityValue;
+    type: FollowUpType;
+    priority?: Priority;
     dueDate: Date;
     notes?: string | null;
     clientId?: string | null;
@@ -24,9 +19,9 @@ export interface CreateFollowUpData {
 export interface UpdateFollowUpData {
     title?: string;
     description?: string | null;
-    type?: FollowUpTypeValue;
-    status?: FollowUpStatusValue;
-    priority?: PriorityValue;
+    type?: FollowUpType;
+    status?: FollowUpStatus;
+    priority?: Priority;
     dueDate?: Date;
     notes?: string | null;
     clientId?: string | null;
@@ -38,9 +33,9 @@ export interface FollowUpQueryParams {
     page?: number;
     limit?: number;
     search?: string;
-    status?: FollowUpStatusValue;
-    type?: FollowUpTypeValue;
-    priority?: PriorityValue;
+    status?: FollowUpStatus;
+    type?: FollowUpType;
+    priority?: Priority;
     clientId?: string;
     offerId?: string;
     contractId?: string;
@@ -83,9 +78,9 @@ const followUpInclude = {
 // Interfejs dla statystyk
 export interface FollowUpStats {
     total: number;
-    byStatus: Record<FollowUpStatusValue, number>;
-    byType: Record<FollowUpTypeValue, number>;
-    byPriority: Record<PriorityValue, number>;
+    byStatus: Record<string, number>;
+    byType: Record<string, number>;
+    byPriority: Record<string, number>;
     overdue: number;
     todayDue: number;
     thisWeekDue: number;
@@ -135,13 +130,13 @@ export const followUpsService = {
 
         // Filtry
         if (status) {
-            where.status = status as FollowUpStatus;
+            where.status = status;
         }
         if (type) {
-            where.type = type as any;
+            where.type = type;
         }
         if (priority) {
-            where.priority = priority as any;
+            where.priority = priority;
         }
         if (clientId) {
             where.clientId = clientId;
@@ -250,10 +245,10 @@ export const followUpsService = {
                 dueDate: data.dueDate,
                 notes: data.notes,
                 status: 'PENDING',
-                user: { connect: { id: userId } },
-                client: data.clientId ? { connect: { id: data.clientId } } : undefined,
-                offer: data.offerId ? { connect: { id: data.offerId } } : undefined,
-                contract: data.contractId ? { connect: { id: data.contractId } } : undefined,
+                userId: userId,
+                clientId: data.clientId || null,
+                offerId: data.offerId || null,
+                contractId: data.contractId || null,
             },
             include: followUpInclude,
         });
@@ -449,21 +444,18 @@ export const followUpsService = {
 
         for (const followUp of allFollowUps) {
             // Status
-            const statusKey = followUp.status as FollowUpStatusValue;
-            if (stats.byStatus[statusKey] !== undefined) {
-                stats.byStatus[statusKey]++;
+            if (stats.byStatus[followUp.status] !== undefined) {
+                stats.byStatus[followUp.status]++;
             }
 
             // Type
-            const typeKey = followUp.type as FollowUpTypeValue;
-            if (stats.byType[typeKey] !== undefined) {
-                stats.byType[typeKey]++;
+            if (stats.byType[followUp.type] !== undefined) {
+                stats.byType[followUp.type]++;
             }
 
             // Priority
-            const priorityKey = followUp.priority as PriorityValue;
-            if (stats.byPriority[priorityKey] !== undefined) {
-                stats.byPriority[priorityKey]++;
+            if (stats.byPriority[followUp.priority] !== undefined) {
+                stats.byPriority[followUp.priority]++;
             }
 
             // Przeterminowane (PENDING i po terminie)

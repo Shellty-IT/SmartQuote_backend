@@ -2,9 +2,9 @@
 
 import { Request } from 'express';
 import {
-    FollowUpType as PrismaFollowUpType,
-    FollowUpStatus as PrismaFollowUpStatus,
-    Priority as PrismaPriority
+    FollowUpType,
+    FollowUpStatus,
+    Priority
 } from '@prisma/client';
 
 // Rozszerzenie Express Request o user (globalne)
@@ -165,24 +165,24 @@ export interface GetContractsParams {
 }
 
 // ============================================
-// Typy dla Follow-up - używamy typów Prisma
+// Typy dla Follow-up - re-eksport z Prisma
 // ============================================
-export type FollowUpTypeValue = PrismaFollowUpType;
-export type FollowUpStatusValue = PrismaFollowUpStatus;
-export type PriorityValue = PrismaPriority;
+export type FollowUpTypeValue = FollowUpType;
+export type FollowUpStatusValue = FollowUpStatus;
+export type PriorityValue = Priority;
 
-// Stałe dla walidacji
-export const FOLLOW_UP_TYPES: FollowUpTypeValue[] = ['CALL', 'EMAIL', 'MEETING', 'TASK', 'REMINDER', 'OTHER'];
-export const FOLLOW_UP_STATUSES: FollowUpStatusValue[] = ['PENDING', 'COMPLETED', 'CANCELLED', 'OVERDUE'];
-export const PRIORITIES: PriorityValue[] = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
+// Stałe dla walidacji - muszą być zgodne z Prisma enum
+export const FOLLOW_UP_TYPES: FollowUpType[] = ['CALL', 'EMAIL', 'MEETING', 'TASK', 'REMINDER', 'OTHER'];
+export const FOLLOW_UP_STATUSES: FollowUpStatus[] = ['PENDING', 'COMPLETED', 'CANCELLED', 'OVERDUE'];
+export const PRIORITIES: Priority[] = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
 
 export interface FollowUpQueryParams {
     page?: number;
     limit?: number;
     search?: string;
-    status?: FollowUpStatusValue;
-    type?: FollowUpTypeValue;
-    priority?: PriorityValue;
+    status?: FollowUpStatus;
+    type?: FollowUpType;
+    priority?: Priority;
     clientId?: string;
     offerId?: string;
     contractId?: string;
@@ -197,8 +197,8 @@ export interface FollowUpQueryParams {
 export interface CreateFollowUpInput {
     title: string;
     description?: string;
-    type: FollowUpTypeValue;
-    priority?: PriorityValue;
+    type: FollowUpType;
+    priority?: Priority;
     dueDate: Date | string;
     clientId?: string;
     offerId?: string;
@@ -209,9 +209,9 @@ export interface CreateFollowUpInput {
 export interface UpdateFollowUpInput {
     title?: string;
     description?: string;
-    type?: FollowUpTypeValue;
-    status?: FollowUpStatusValue;
-    priority?: PriorityValue;
+    type?: FollowUpType;
+    status?: FollowUpStatus;
+    priority?: Priority;
     dueDate?: Date | string;
     clientId?: string;
     offerId?: string;
