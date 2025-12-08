@@ -1,6 +1,11 @@
 // smartquote_backend/src/types/index.ts
 
 import { Request } from 'express';
+import {
+    FollowUpType as PrismaFollowUpType,
+    FollowUpStatus as PrismaFollowUpStatus,
+    Priority as PrismaPriority
+} from '@prisma/client';
 
 // Rozszerzenie Express Request o user (globalne)
 declare global {
@@ -24,6 +29,88 @@ export interface AuthenticatedRequest extends Request {
         name?: string | null;
         role: string;
     };
+}
+
+// ============================================
+// Typy dla paginacji i zapytań
+// ============================================
+export interface PaginationQuery {
+    page?: string;
+    limit?: string;
+    search?: string;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+}
+
+// ============================================
+// Typy dla Client
+// ============================================
+export interface CreateClientInput {
+    type?: 'PERSON' | 'COMPANY';
+    name: string;
+    email?: string;
+    phone?: string;
+    company?: string;
+    nip?: string;
+    regon?: string;
+    address?: string;
+    city?: string;
+    postalCode?: string;
+    country?: string;
+    website?: string;
+    notes?: string;
+}
+
+export interface UpdateClientInput {
+    type?: 'PERSON' | 'COMPANY';
+    name?: string;
+    email?: string;
+    phone?: string;
+    company?: string;
+    nip?: string;
+    regon?: string;
+    address?: string;
+    city?: string;
+    postalCode?: string;
+    country?: string;
+    website?: string;
+    notes?: string;
+    isActive?: boolean;
+}
+
+// ============================================
+// Typy dla Offer
+// ============================================
+export interface OfferItemInput {
+    name: string;
+    description?: string;
+    quantity: number;
+    unit?: string;
+    unitPrice: number;
+    vatRate?: number;
+    discount?: number;
+}
+
+export interface CreateOfferInput {
+    title: string;
+    description?: string;
+    clientId: string;
+    validUntil?: Date | string;
+    notes?: string;
+    terms?: string;
+    paymentDays?: number;
+    items: OfferItemInput[];
+}
+
+export interface UpdateOfferInput {
+    title?: string;
+    description?: string;
+    status?: 'DRAFT' | 'SENT' | 'VIEWED' | 'NEGOTIATION' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED';
+    validUntil?: Date | string;
+    notes?: string;
+    terms?: string;
+    paymentDays?: number;
+    items?: OfferItemInput[];
 }
 
 // ============================================
@@ -78,11 +165,60 @@ export interface GetContractsParams {
 }
 
 // ============================================
-// Typy dla Follow-up
+// Typy dla Follow-up - używamy typów Prisma
 // ============================================
-export type FollowUpTypeValue = 'CALL' | 'EMAIL' | 'MEETING' | 'TASK' | 'REMINDER' | 'OTHER';
-export type FollowUpStatusValue = 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'OVERDUE';
-export type PriorityValue = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+export type FollowUpTypeValue = PrismaFollowUpType;
+export type FollowUpStatusValue = PrismaFollowUpStatus;
+export type PriorityValue = PrismaPriority;
+
+// Stałe dla walidacji
+export const FOLLOW_UP_TYPES: FollowUpTypeValue[] = ['CALL', 'EMAIL', 'MEETING', 'TASK', 'REMINDER', 'OTHER'];
+export const FOLLOW_UP_STATUSES: FollowUpStatusValue[] = ['PENDING', 'COMPLETED', 'CANCELLED', 'OVERDUE'];
+export const PRIORITIES: PriorityValue[] = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
+
+export interface FollowUpQueryParams {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: FollowUpStatusValue;
+    type?: FollowUpTypeValue;
+    priority?: PriorityValue;
+    clientId?: string;
+    offerId?: string;
+    contractId?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+    overdue?: boolean;
+    upcoming?: number;
+}
+
+export interface CreateFollowUpInput {
+    title: string;
+    description?: string;
+    type: FollowUpTypeValue;
+    priority?: PriorityValue;
+    dueDate: Date | string;
+    clientId?: string;
+    offerId?: string;
+    contractId?: string;
+    notes?: string;
+}
+
+export interface UpdateFollowUpInput {
+    title?: string;
+    description?: string;
+    type?: FollowUpTypeValue;
+    status?: FollowUpStatusValue;
+    priority?: PriorityValue;
+    dueDate?: Date | string;
+    clientId?: string;
+    offerId?: string;
+    contractId?: string;
+    notes?: string;
+    completedAt?: Date | string;
+}
 
 // ============================================
 // Typy dla AI

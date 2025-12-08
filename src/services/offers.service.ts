@@ -1,16 +1,40 @@
+// src/services/offers.service.ts
+
 import { Prisma, OfferStatus } from '@prisma/client';
 import prisma from '../lib/prisma';
-import { CreateOfferInput, UpdateOfferInput, PaginationQuery } from '../types';
+import { CreateOfferInput, UpdateOfferInput, PaginationQuery, OfferItemInput } from '../types';
 import { generateOfferNumber } from '../utils/offerNumber';
 import { Decimal } from '@prisma/client/runtime/library';
 
+// Typ pomocniczy dla obliczeń
+interface ItemCalculation {
+    quantity: number;
+    unitPrice: number;
+    vatRate?: number;
+    discount?: number;
+}
+
+// Typ dla pozycji z obliczonymi sumami
+interface ItemWithTotals {
+    name: string;
+    description: string | undefined;
+    quantity: number;
+    unit: string;
+    unitPrice: number;
+    vatRate: number;
+    discount: number;
+    totalNet: Decimal;
+    totalVat: Decimal;
+    totalGross: Decimal;
+    position: number;
+}
+
 export class OffersService {
-    private calculateItemTotals(item: {
-        quantity: number;
-        unitPrice: number;
-        vatRate?: number;
-        discount?: number;
-    }) {
+    private calculateItemTotals(item: ItemCalculation): {
+        totalNet: Decimal;
+        totalVat: Decimal;
+        totalGross: Decimal;
+    } {
         const quantity = new Decimal(item.quantity);
         const unitPrice = new Decimal(item.unitPrice);
         const vatRate = new Decimal(item.vatRate || 23);
@@ -33,7 +57,7 @@ export class OffersService {
     }
 
     async create(userId: string, data: CreateOfferInput) {
-        // Sprawdź czy klient należy do użytkownika
+        // Sprawdź, czy klient należy do użytkownika
         const client = await prisma.client.findFirst({
             where: { id: data.clientId, userId },
         });
@@ -46,7 +70,7 @@ export class OffersService {
         const number = await generateOfferNumber(userId);
 
         // Oblicz sumy pozycji
-        const itemsWithTotals = data.items.map((item, index) => {
+        const itemsWithTotals: ItemWithTotals[] = data.items.map((item: OfferItemInput, index: number) => {
             const totals = this.calculateItemTotals(item);
             return {
                 name: item.name,
@@ -65,15 +89,15 @@ export class OffersService {
 
         // Oblicz sumy oferty
         const totalNet = itemsWithTotals.reduce(
-            (sum, item) => sum.plus(item.totalNet),
+            (sum: Decimal, item: ItemWithTotals) => sum.plus(item.totalNet),
             new Decimal(0)
         );
         const totalVat = itemsWithTotals.reduce(
-            (sum, item) => sum.plus(item.totalVat),
+            (sum: Decimal, item: ItemWithTotals) => sum.plus(item.totalVat),
             new Decimal(0)
         );
         const totalGross = itemsWithTotals.reduce(
-            (sum, item) => sum.plus(item.totalGross),
+            (sum: Decimal, item: ItemWithTotals) => sum.plus(item.totalGross),
             new Decimal(0)
         );
 
@@ -222,7 +246,7 @@ export class OffersService {
 
         // Jeśli są nowe pozycje, usuń stare i dodaj nowe
         if (data.items && data.items.length > 0) {
-            const itemsWithTotals = data.items.map((item, index) => {
+            const itemsWithTotals: ItemWithTotals[] = data.items.map((item: OfferItemInput, index: number) => {
                 const totals = this.calculateItemTotals(item);
                 return {
                     name: item.name,
@@ -240,15 +264,15 @@ export class OffersService {
             });
 
             const totalNet = itemsWithTotals.reduce(
-                (sum, item) => sum.plus(item.totalNet),
+                (sum: Decimal, item: ItemWithTotals) => sum.plus(item.totalNet),
                 new Decimal(0)
             );
             const totalVat = itemsWithTotals.reduce(
-                (sum, item) => sum.plus(item.totalVat),
+                (sum: Decimal, item: ItemWithTotals) => sum.plus(item.totalVat),
                 new Decimal(0)
             );
             const totalGross = itemsWithTotals.reduce(
-                (sum, item) => sum.plus(item.totalGross),
+                (sum: Decimal, item: ItemWithTotals) => sum.plus(item.totalGross),
                 new Decimal(0)
             );
 
@@ -383,4 +407,5 @@ export class OffersService {
     }
 }
 
+// Eksporty - oba warianty dla kompatybilności
 export const offersService = new OffersService();
