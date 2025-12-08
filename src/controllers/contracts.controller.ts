@@ -1,5 +1,6 @@
 // smartquote_backend/src/controllers/contracts.controller.ts
 
+import '../types';
 import { Request, Response, NextFunction } from 'express';
 import contractsService from '../services/contracts.service';
 import { pdfService } from '../services/pdf.service';

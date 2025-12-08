@@ -1,55 +1,13 @@
 // smartquote_backend/src/services/contracts.service.ts
 
-import { Prisma, ContractStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
-
-interface ContractItemInput {
-    name: string;
-    description?: string;
-    quantity: number;
-    unit?: string;
-    unitPrice: number;
-    vatRate?: number;
-    discount?: number;
-    position?: number;
-}
-
-interface CreateContractInput {
-    title: string;
-    description?: string;
-    clientId: string;
-    offerId?: string;
-    startDate?: Date | string;
-    endDate?: Date | string;
-    terms?: string;
-    paymentTerms?: string;
-    paymentDays?: number;
-    notes?: string;
-    items: ContractItemInput[];
-}
-
-interface UpdateContractInput {
-    title?: string;
-    description?: string;
-    status?: ContractStatus;
-    startDate?: Date | string;
-    endDate?: Date | string;
-    signedAt?: Date | string;
-    terms?: string;
-    paymentTerms?: string;
-    paymentDays?: number;
-    notes?: string;
-    items?: ContractItemInput[];
-}
-
-interface GetContractsParams {
-    userId: string;
-    page?: number;
-    limit?: number;
-    status?: ContractStatus;
-    clientId?: string;
-    search?: string;
-}
+import {
+    ContractItemInput,
+    CreateContractInput,
+    UpdateContractInput,
+    GetContractsParams
+} from '../types';
 
 // Helper do konwersji daty
 function toDate(value: Date | string | undefined | null): Date | null {

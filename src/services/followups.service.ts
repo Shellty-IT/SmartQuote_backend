@@ -2,13 +2,18 @@
 
 import { Prisma, FollowUpStatus } from '@prisma/client';
 import prisma from '../lib/prisma';
+import {
+    FollowUpTypeValue,
+    FollowUpStatusValue,
+    PriorityValue
+} from '../types';
 
 // Interfejsy dla danych wejściowych
 export interface CreateFollowUpData {
     title: string;
     description?: string | null;
-    type: 'CALL' | 'EMAIL' | 'MEETING' | 'TASK' | 'REMINDER' | 'OTHER';
-    priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+    type: FollowUpTypeValue;
+    priority?: PriorityValue;
     dueDate: Date;
     notes?: string | null;
     clientId?: string | null;
@@ -19,9 +24,9 @@ export interface CreateFollowUpData {
 export interface UpdateFollowUpData {
     title?: string;
     description?: string | null;
-    type?: 'CALL' | 'EMAIL' | 'MEETING' | 'TASK' | 'REMINDER' | 'OTHER';
-    status?: 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'OVERDUE';
-    priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+    type?: FollowUpTypeValue;
+    status?: FollowUpStatusValue;
+    priority?: PriorityValue;
     dueDate?: Date;
     notes?: string | null;
     clientId?: string | null;
@@ -33,9 +38,9 @@ export interface FollowUpQueryParams {
     page?: number;
     limit?: number;
     search?: string;
-    status?: string;
-    type?: string;
-    priority?: string;
+    status?: FollowUpStatusValue;
+    type?: FollowUpTypeValue;
+    priority?: PriorityValue;
     clientId?: string;
     offerId?: string;
     contractId?: string;
@@ -78,9 +83,9 @@ const followUpInclude = {
 // Interfejs dla statystyk
 export interface FollowUpStats {
     total: number;
-    byStatus: Record<string, number>;
-    byType: Record<string, number>;
-    byPriority: Record<string, number>;
+    byStatus: Record<FollowUpStatusValue, number>;
+    byType: Record<FollowUpTypeValue, number>;
+    byPriority: Record<PriorityValue, number>;
     overdue: number;
     todayDue: number;
     thisWeekDue: number;
@@ -444,19 +449,19 @@ export const followUpsService = {
 
         for (const followUp of allFollowUps) {
             // Status
-            const statusKey = followUp.status as string;
+            const statusKey = followUp.status as FollowUpStatusValue;
             if (stats.byStatus[statusKey] !== undefined) {
                 stats.byStatus[statusKey]++;
             }
 
             // Type
-            const typeKey = followUp.type as string;
+            const typeKey = followUp.type as FollowUpTypeValue;
             if (stats.byType[typeKey] !== undefined) {
                 stats.byType[typeKey]++;
             }
 
             // Priority
-            const priorityKey = followUp.priority as string;
+            const priorityKey = followUp.priority as PriorityValue;
             if (stats.byPriority[priorityKey] !== undefined) {
                 stats.byPriority[priorityKey]++;
             }
@@ -594,4 +599,4 @@ export const followUpsService = {
     },
 };
 
-export default followUpsService;``
+export default followUpsService;

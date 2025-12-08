@@ -4,9 +4,11 @@
     "module": "commonjs",
     "outDir": "./dist",
     "rootDir": "./",
+    "typeRoots": ["./node_modules/@types", "./src/types"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true
   },
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules"],
+  "include": ["src/**/*"]
 }
