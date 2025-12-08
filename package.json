@@ -3,9 +3,8 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "npx prisma generate && tsc",
+    "build": "node node_modules/prisma/build/index.js generate && tsc",
     "start": "node dist/index.js",
-    "postinstall": "npx prisma generate",
     "seed": "tsx scripts/seed.ts",
     "db:migrate": "npx prisma migrate dev",
     "db:push": "npx prisma db push",
@@ -22,6 +21,7 @@
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "pdfkit": "^0.17.2",
+    "prisma": "^5.22.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -32,7 +32,6 @@
     "@types/morgan": "^1.9.9",
     "@types/node": "^20.14.0",
     "@types/pdfkit": "^0.17.4",
-    "prisma": "^5.22.0",
     "tsx": "^4.19.0",
     "typescript": "^5.5.0"
   },
