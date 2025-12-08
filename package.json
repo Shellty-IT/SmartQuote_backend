@@ -33,8 +33,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "tsx": "^4.19.0",
-    "@netlify/plugin-nextjs": "^5.14.7"
+    "tsx": "^4.19.0"
   },
   "engines": {
     "node": ">=18.0.0"
