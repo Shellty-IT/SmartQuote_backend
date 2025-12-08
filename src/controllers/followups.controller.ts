@@ -1,7 +1,7 @@
 // src/controllers/followups.controller.ts
 
 import { Response, NextFunction } from 'express';
-import { AuthenticatedRequest } from '../types';
+import { AuthenticatedRequest, FollowUpStatusValue, FollowUpTypeValue, PriorityValue } from '../types';
 import followUpsService from '../services/followups.service';
 import { successResponse, errorResponse, paginatedResponse } from '../utils/apiResponse';
 import { FollowUpStatus } from '@prisma/client';
@@ -13,13 +13,29 @@ export const followUpsController = {
     async getAll(req: AuthenticatedRequest, res: Response, next: NextFunction) {
         try {
             const userId = req.user!.id;
+
+            // Walidacja i rzutowanie typów
+            const statusParam = req.query.status as string | undefined;
+            const typeParam = req.query.type as string | undefined;
+            const priorityParam = req.query.priority as string | undefined;
+
+            const validStatuses: FollowUpStatusValue[] = ['PENDING', 'COMPLETED', 'CANCELLED', 'OVERDUE'];
+            const validTypes: FollowUpTypeValue[] = ['CALL', 'EMAIL', 'MEETING', 'TASK', 'REMINDER', 'OTHER'];
+            const validPriorities: PriorityValue[] = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
+
             const query = {
                 page: req.query.page ? parseInt(req.query.page as string) : 1,
                 limit: req.query.limit ? parseInt(req.query.limit as string) : 10,
                 search: req.query.search as string | undefined,
-                status: req.query.status as string | undefined,
-                type: req.query.type as string | undefined,
-                priority: req.query.priority as string | undefined,
+                status: statusParam && validStatuses.includes(statusParam as FollowUpStatusValue)
+                    ? statusParam as FollowUpStatusValue
+                    : undefined,
+                type: typeParam && validTypes.includes(typeParam as FollowUpTypeValue)
+                    ? typeParam as FollowUpTypeValue
+                    : undefined,
+                priority: priorityParam && validPriorities.includes(priorityParam as PriorityValue)
+                    ? priorityParam as PriorityValue
+                    : undefined,
                 clientId: req.query.clientId as string | undefined,
                 offerId: req.query.offerId as string | undefined,
                 contractId: req.query.contractId as string | undefined,
@@ -119,7 +135,6 @@ export const followUpsController = {
         try {
             const userId = req.user!.id;
 
-            // Konwertuj dueDate na Date jeśli jest stringiem
             const data = {
                 ...req.body,
                 dueDate: new Date(req.body.dueDate),
@@ -146,7 +161,6 @@ export const followUpsController = {
             const userId = req.user!.id;
             const { id } = req.params;
 
-            // Konwertuj dueDate na Date jeśli jest stringiem
             const data = { ...req.body };
             if (data.dueDate) {
                 data.dueDate = new Date(data.dueDate);
