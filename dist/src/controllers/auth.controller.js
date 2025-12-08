@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -19,101 +10,95 @@ const prisma_1 = __importDefault(require("../lib/prisma"));
 const config_1 = require("../config");
 const apiResponse_1 = require("../utils/apiResponse");
 class AuthController {
-    register(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { email, password, name } = req.body;
-                const existingUser = yield prisma_1.default.user.findUnique({
-                    where: { email: email.toLowerCase() },
-                });
-                if (existingUser) {
-                    return (0, apiResponse_1.errorResponse)(res, 'USER_EXISTS', 'Użytkownik z tym adresem email już istnieje', 409);
-                }
-                const hashedPassword = yield bcrypt_1.default.hash(password, config_1.config.saltRounds);
-                const user = yield prisma_1.default.user.create({
-                    data: {
-                        email: email.toLowerCase(),
-                        password: hashedPassword,
-                        name: name || null,
-                    },
-                    select: {
-                        id: true,
-                        email: true,
-                        name: true,
-                        createdAt: true,
-                    },
-                });
-                console.log(`[AUTH] Nowy użytkownik: ${user.email}`);
-                return (0, apiResponse_1.successResponse)(res, { user, message: 'Konto utworzone pomyślnie' }, 201);
+    async register(req, res) {
+        try {
+            const { email, password, name } = req.body;
+            const existingUser = await prisma_1.default.user.findUnique({
+                where: { email: email.toLowerCase() },
+            });
+            if (existingUser) {
+                return (0, apiResponse_1.errorResponse)(res, 'USER_EXISTS', 'Użytkownik z tym adresem email już istnieje', 409);
             }
-            catch (error) {
-                console.error('[AUTH] Register error:', error);
-                return (0, apiResponse_1.errorResponse)(res, 'REGISTER_FAILED', 'Błąd rejestracji', 500);
-            }
-        });
+            const hashedPassword = await bcrypt_1.default.hash(password, config_1.config.saltRounds);
+            const user = await prisma_1.default.user.create({
+                data: {
+                    email: email.toLowerCase(),
+                    password: hashedPassword,
+                    name: name || null,
+                },
+                select: {
+                    id: true,
+                    email: true,
+                    name: true,
+                    createdAt: true,
+                },
+            });
+            console.log(`[AUTH] Nowy użytkownik: ${user.email}`);
+            return (0, apiResponse_1.successResponse)(res, { user, message: 'Konto utworzone pomyślnie' }, 201);
+        }
+        catch (error) {
+            console.error('[AUTH] Register error:', error);
+            return (0, apiResponse_1.errorResponse)(res, 'REGISTER_FAILED', 'Błąd rejestracji', 500);
+        }
     }
-    login(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { email, password } = req.body;
-                const user = yield prisma_1.default.user.findUnique({
-                    where: { email: email.toLowerCase() },
-                });
-                if (!user) {
-                    return (0, apiResponse_1.errorResponse)(res, 'INVALID_CREDENTIALS', 'Nieprawidłowy email lub hasło', 401);
-                }
-                const isPasswordValid = yield bcrypt_1.default.compare(password, user.password);
-                if (!isPasswordValid) {
-                    console.log(`[AUTH] Nieudane logowanie: ${email}`);
-                    return (0, apiResponse_1.errorResponse)(res, 'INVALID_CREDENTIALS', 'Nieprawidłowy email lub hasło', 401);
-                }
-                // ✅ POPRAWKA: Użyj SignOptions z poprawnym typem
-                const signOptions = {
-                    expiresIn: '24h', // Bezpośrednio string literal, nie zmienna
-                };
-                const token = jsonwebtoken_1.default.sign({ id: user.id, email: user.email }, config_1.config.jwtSecret, signOptions);
-                console.log(`[AUTH] Zalogowano: ${user.email}`);
-                return (0, apiResponse_1.successResponse)(res, {
-                    user: {
-                        id: user.id,
-                        email: user.email,
-                        name: user.name,
-                        role: user.role,
-                    },
-                    token,
-                });
+    async login(req, res) {
+        try {
+            const { email, password } = req.body;
+            const user = await prisma_1.default.user.findUnique({
+                where: { email: email.toLowerCase() },
+            });
+            if (!user) {
+                return (0, apiResponse_1.errorResponse)(res, 'INVALID_CREDENTIALS', 'Nieprawidłowy email lub hasło', 401);
             }
-            catch (error) {
-                console.error('[AUTH] Login error:', error);
-                return (0, apiResponse_1.errorResponse)(res, 'LOGIN_FAILED', 'Błąd logowania', 500);
+            const isPasswordValid = await bcrypt_1.default.compare(password, user.password);
+            if (!isPasswordValid) {
+                console.log(`[AUTH] Nieudane logowanie: ${email}`);
+                return (0, apiResponse_1.errorResponse)(res, 'INVALID_CREDENTIALS', 'Nieprawidłowy email lub hasło', 401);
             }
-        });
+            // ✅ POPRAWKA: Użyj SignOptions z poprawnym typem
+            const signOptions = {
+                expiresIn: '24h', // Bezpośrednio string literal, nie zmienna
+            };
+            const token = jsonwebtoken_1.default.sign({ id: user.id, email: user.email }, config_1.config.jwtSecret, signOptions);
+            console.log(`[AUTH] Zalogowano: ${user.email}`);
+            return (0, apiResponse_1.successResponse)(res, {
+                user: {
+                    id: user.id,
+                    email: user.email,
+                    name: user.name,
+                    role: user.role,
+                },
+                token,
+            });
+        }
+        catch (error) {
+            console.error('[AUTH] Login error:', error);
+            return (0, apiResponse_1.errorResponse)(res, 'LOGIN_FAILED', 'Błąd logowania', 500);
+        }
     }
-    me(req, res) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const user = yield prisma_1.default.user.findUnique({
-                    where: { id: req.user.id },
-                    select: {
-                        id: true,
-                        email: true,
-                        name: true,
-                        company: true,
-                        phone: true,
-                        role: true,
-                        createdAt: true,
-                    },
-                });
-                if (!user) {
-                    return (0, apiResponse_1.errorResponse)(res, 'NOT_FOUND', 'Użytkownik nie znaleziony', 404);
-                }
-                return (0, apiResponse_1.successResponse)(res, user);
+    async me(req, res) {
+        try {
+            const user = await prisma_1.default.user.findUnique({
+                where: { id: req.user.id },
+                select: {
+                    id: true,
+                    email: true,
+                    name: true,
+                    company: true,
+                    phone: true,
+                    role: true,
+                    createdAt: true,
+                },
+            });
+            if (!user) {
+                return (0, apiResponse_1.errorResponse)(res, 'NOT_FOUND', 'Użytkownik nie znaleziony', 404);
             }
-            catch (error) {
-                console.error('[AUTH] Me error:', error);
-                return (0, apiResponse_1.errorResponse)(res, 'FETCH_FAILED', 'Błąd pobierania danych', 500);
-            }
-        });
+            return (0, apiResponse_1.successResponse)(res, user);
+        }
+        catch (error) {
+            console.error('[AUTH] Me error:', error);
+            return (0, apiResponse_1.errorResponse)(res, 'FETCH_FAILED', 'Błąd pobierania danych', 500);
+        }
     }
 }
 exports.AuthController = AuthController;
