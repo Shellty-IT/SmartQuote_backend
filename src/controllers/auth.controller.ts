@@ -1,3 +1,5 @@
+// smartquote_backend/src/controllers/auth.controller.ts
+
 import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt, { SignOptions } from 'jsonwebtoken';
@@ -63,9 +65,8 @@ export class AuthController {
                 return errorResponse(res, 'INVALID_CREDENTIALS', 'Nieprawidłowy email lub hasło', 401);
             }
 
-            // ✅ POPRAWKA: Użyj SignOptions z poprawnym typem
             const signOptions: SignOptions = {
-                expiresIn: '24h',  // Bezpośrednio string literal, nie zmienna
+                expiresIn: '24h',
             };
 
             const token = jwt.sign(
@@ -99,10 +100,19 @@ export class AuthController {
                     id: true,
                     email: true,
                     name: true,
-                    company: true,
                     phone: true,
+                    avatar: true,
                     role: true,
                     createdAt: true,
+                    companyInfo: {
+                        select: {
+                            name: true,
+                            nip: true,
+                            address: true,
+                            city: true,
+                            postalCode: true,
+                        },
+                    },
                 },
             });
 
@@ -110,7 +120,13 @@ export class AuthController {
                 return errorResponse(res, 'NOT_FOUND', 'Użytkownik nie znaleziony', 404);
             }
 
-            return successResponse(res, user);
+            // Zwróć dane z company z companyInfo dla kompatybilności wstecznej
+            const response = {
+                ...user,
+                company: user.companyInfo?.name || null,
+            };
+
+            return successResponse(res, response);
         } catch (error) {
             console.error('[AUTH] Me error:', error);
             return errorResponse(res, 'FETCH_FAILED', 'Błąd pobierania danych', 500);

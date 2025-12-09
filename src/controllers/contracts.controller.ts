@@ -73,13 +73,31 @@ export async function generateContractPDF(req: Request, res: Response, next: Nex
         const userId = req.user!.id;
         const { id } = req.params;
 
-        // Pobierz umowę z wszystkimi relacjami
+        // Pobierz umowę z wszystkimi relacjami + companyInfo
         const contract = await prisma.contract.findFirst({
             where: { id, userId },
             include: {
                 client: true,
                 items: { orderBy: { position: 'asc' } },
-                user: true,
+                user: {
+                    select: {
+                        id: true,
+                        email: true,
+                        name: true,
+                        phone: true,
+                        companyInfo: {
+                            select: {
+                                name: true,
+                                nip: true,
+                                address: true,
+                                city: true,
+                                postalCode: true,
+                                phone: true,
+                                email: true,
+                            },
+                        },
+                    },
+                },
             },
         });
 
@@ -87,8 +105,18 @@ export async function generateContractPDF(req: Request, res: Response, next: Nex
             return errorResponse(res, 'NOT_FOUND', 'Umowa nie znaleziona', 404);
         }
 
+        // Przekształć dane dla PDF service (dodaj company z companyInfo)
+        const pdfContract = {
+            ...contract,
+            user: {
+                ...contract.user,
+                company: contract.user.companyInfo?.name || null,
+                phone: contract.user.companyInfo?.phone || contract.user.phone,
+            },
+        };
+
         // Generuj PDF
-        const pdfBuffer = await pdfService.generateContractPDF(contract);
+        const pdfBuffer = await pdfService.generateContractPDF(pdfContract);
 
         // Ustaw nagłówki odpowiedzi
         res.setHeader('Content-Type', 'application/pdf');

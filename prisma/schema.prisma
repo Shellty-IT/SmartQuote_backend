@@ -1,3 +1,5 @@
+// smartquote_backend/prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -15,20 +17,106 @@ model User {
   email     String   @unique
   password  String
   name      String?
-  company   String?
   phone     String?
+  avatar    String?
   role      UserRole @default(USER)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relacje
-  clients   Client[]
-  offers    Offer[]
-  followUps FollowUp[]
-  contracts Contract[]
+  clients     Client[]
+  offers      Offer[]
+  followUps   FollowUp[]
+  contracts   Contract[]
+  settings    UserSettings?
+  companyInfo CompanyInfo?
+  apiKeys     ApiKey[]
 
   @@map("users")
+}
+
+// ============================================
+// USER_SETTINGS - Ustawienia użytkownika
+// ============================================
+model UserSettings {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Wygląd
+  theme    String @default("light")
+  language String @default("pl")
+
+  // Powiadomienia
+  emailNotifications Boolean @default(true)
+  offerNotifications Boolean @default(true)
+  followUpReminders  Boolean @default(true)
+  weeklyReport       Boolean @default(true)
+
+  // AI
+  aiTone            String  @default("professional")
+  aiAutoSuggestions Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("user_settings")
+}
+
+// ============================================
+// COMPANY_INFO - Dane firmy użytkownika
+// ============================================
+model CompanyInfo {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String?
+  nip         String?
+  regon       String?
+  address     String?
+  city        String?
+  postalCode  String?
+  country     String? @default("Polska")
+  phone       String?
+  email       String?
+  website     String?
+  bankName    String?
+  bankAccount String?
+  logo        String?
+
+  defaultPaymentDays Int     @default(14)
+  defaultTerms       String?
+  defaultNotes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("company_info")
+}
+
+// ============================================
+// API_KEY - Klucze API użytkownika
+// ============================================
+model ApiKey {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  key         String    @unique
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  isActive    Boolean   @default(true)
+  permissions String[]  @default(["read"])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([key])
+  @@map("api_keys")
 }
 
 // ============================================
@@ -53,7 +141,6 @@ model Client {
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 
-  // Relacje
   userId    String
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   offers    Offer[]
@@ -76,20 +163,17 @@ model Offer {
   description String?
   status      OfferStatus @default(DRAFT)
 
-  // Kwoty
   totalNet   Decimal @default(0) @db.Decimal(12, 2)
   totalVat   Decimal @default(0) @db.Decimal(12, 2)
   totalGross Decimal @default(0) @db.Decimal(12, 2)
   currency   String  @default("PLN")
 
-  // Daty
   validUntil DateTime?
   sentAt     DateTime?
   viewedAt   DateTime?
   acceptedAt DateTime?
   rejectedAt DateTime?
 
-  // Dodatkowe
   notes       String?
   terms       String?
   paymentDays Int     @default(14)
@@ -97,7 +181,6 @@ model Offer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Relacje
   userId    String
   user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   clientId  String
@@ -133,7 +216,6 @@ model OfferItem {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // Relacje
   offerId String
   offer   Offer  @relation(fields: [offerId], references: [id], onDelete: Cascade)
 
@@ -151,38 +233,32 @@ model Contract {
   description String?
   status      ContractStatus @default(DRAFT)
 
-  // Kwoty
   totalNet   Decimal @default(0) @db.Decimal(12, 2)
   totalVat   Decimal @default(0) @db.Decimal(12, 2)
   totalGross Decimal @default(0) @db.Decimal(12, 2)
   currency   String  @default("PLN")
 
-  // Daty
   startDate DateTime?
   endDate   DateTime?
   signedAt  DateTime?
 
-  // Warunki
   terms        String?
   paymentTerms String?
   paymentDays  Int     @default(14)
 
-  // Dodatkowe
   notes String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Relacje
-  userId   String
-  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  clientId String
-  client   Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  offerId  String?
-  offer    Offer?         @relation(fields: [offerId], references: [id], onDelete: SetNull)
-  items    ContractItem[]
-
-  followUps FollowUp[] // DODANE
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId  String
+  client    Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  offerId   String?
+  offer     Offer?         @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  items     ContractItem[]
+  followUps FollowUp[]
 
   @@unique([userId, number])
   @@index([userId])
@@ -212,7 +288,6 @@ model ContractItem {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // Relacje
   contractId String
   contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
 
@@ -232,24 +307,23 @@ model FollowUp {
   priority    Priority       @default(MEDIUM)
   dueDate     DateTime
   completedAt DateTime?
-  notes       String?        // DODANE
+  notes       String?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
-  // Relacje
   userId     String
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   clientId   String?
   client     Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
   offerId    String?
   offer      Offer?    @relation(fields: [offerId], references: [id], onDelete: SetNull)
-  contractId String?   // DODANE
+  contractId String?
   contract   Contract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([clientId])
   @@index([offerId])
-  @@index([contractId]) // DODANE
+  @@index([contractId])
   @@index([dueDate])
   @@index([status])
   @@index([priority])
@@ -293,7 +367,7 @@ enum FollowUpType {
   CALL
   EMAIL
   MEETING
-  TASK      // DODANE
+  TASK
   REMINDER
   OTHER
 }

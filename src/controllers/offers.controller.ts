@@ -1,4 +1,4 @@
-// backend/src/controllers/offers.controller.ts
+// smartquote_backend/src/controllers/offers.controller.ts
 
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../types';
@@ -112,7 +112,7 @@ export class OffersController {
             const { id } = req.params;
             const userId = req.user!.id;
 
-            // Pobierz ofertę z wszystkimi relacjami
+            // Pobierz ofertę z wszystkimi relacjami + companyInfo
             const offer = await prisma.offer.findFirst({
                 where: {
                     id,
@@ -128,8 +128,18 @@ export class OffersController {
                             id: true,
                             email: true,
                             name: true,
-                            company: true,
                             phone: true,
+                            companyInfo: {
+                                select: {
+                                    name: true,
+                                    nip: true,
+                                    address: true,
+                                    city: true,
+                                    postalCode: true,
+                                    phone: true,
+                                    email: true,
+                                },
+                            },
                         },
                     },
                 },
@@ -139,8 +149,18 @@ export class OffersController {
                 return errorResponse(res, 'NOT_FOUND', 'Oferta nie znaleziona', 404);
             }
 
+            // Przekształć dane dla PDF service (dodaj company z companyInfo)
+            const pdfOffer = {
+                ...offer,
+                user: {
+                    ...offer.user,
+                    company: offer.user.companyInfo?.name || null,
+                    phone: offer.user.companyInfo?.phone || offer.user.phone,
+                },
+            };
+
             // Generuj PDF
-            const pdfBuffer = await pdfService.generateOfferPDF(offer);
+            const pdfBuffer = await pdfService.generateOfferPDF(pdfOffer);
 
             // Ustaw nagłówki odpowiedzi
             const filename = `Oferta_${offer.number.replace(/\//g, '-')}.pdf`;
