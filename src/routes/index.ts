@@ -1,5 +1,8 @@
+// smartquote_backend/src/routes/index.ts
+
 import { Router } from 'express';
 import authRoutes from './auth.routes';
+import publicOfferRoutes from './publicOffer.routes';
 import clientsRoutes from './clients.routes';
 import offersRoutes from './offers.routes';
 import contractsRoutes from './contracts.routes';
@@ -10,12 +13,15 @@ import settingsRoutes from './settings.routes';
 const router = Router();
 
 router.use('/auth', authRoutes);
+router.use('/public/offers', publicOfferRoutes);
+
 router.use('/clients', clientsRoutes);
 router.use('/offers', offersRoutes);
 router.use('/contracts', contractsRoutes);
 router.use('/followups', followUpsRoutes);
 router.use('/ai', aiRoutes);
 router.use('/settings', settingsRoutes);
+
 router.get('/health', (req, res) => {
     res.json({ success: true, data: { status: 'healthy', timestamp: new Date().toISOString() } });
 });

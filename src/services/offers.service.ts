@@ -1,12 +1,12 @@
-// src/services/offers.service.ts
+// smartquote_backend/src/services/offers.service.ts
 
+import crypto from 'crypto';
 import { Prisma, OfferStatus } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { CreateOfferInput, UpdateOfferInput, PaginationQuery, OfferItemInput } from '../types';
 import { generateOfferNumber } from '../utils/offerNumber';
 import { Decimal } from '@prisma/client/runtime/library';
 
-// Typ pomocniczy dla obliczeń
 interface ItemCalculation {
     quantity: number;
     unitPrice: number;
@@ -14,7 +14,6 @@ interface ItemCalculation {
     discount?: number;
 }
 
-// Typ dla pozycji z obliczonymi sumami
 interface ItemWithTotals {
     name: string;
     description: string | undefined;
@@ -27,6 +26,10 @@ interface ItemWithTotals {
     totalVat: Decimal;
     totalGross: Decimal;
     position: number;
+    isOptional: boolean;
+    isSelected: boolean;
+    minQuantity: number;
+    maxQuantity: number;
 }
 
 export class OffersService {
@@ -40,11 +43,9 @@ export class OffersService {
         const vatRate = new Decimal(item.vatRate || 23);
         const discount = new Decimal(item.discount || 0);
 
-        // Cena po rabacie
         const discountMultiplier = new Decimal(1).minus(discount.dividedBy(100));
         const effectiveUnitPrice = unitPrice.times(discountMultiplier);
 
-        // Obliczenia
         const totalNet = quantity.times(effectiveUnitPrice);
         const totalVat = totalNet.times(vatRate.dividedBy(100));
         const totalGross = totalNet.plus(totalVat);
@@ -56,8 +57,28 @@ export class OffersService {
         };
     }
 
+    private buildItemWithTotals(item: OfferItemInput, index: number): ItemWithTotals {
+        const totals = this.calculateItemTotals(item);
+        return {
+            name: item.name,
+            description: item.description,
+            quantity: item.quantity,
+            unit: item.unit || 'szt.',
+            unitPrice: item.unitPrice,
+            vatRate: item.vatRate || 23,
+            discount: item.discount || 0,
+            totalNet: totals.totalNet,
+            totalVat: totals.totalVat,
+            totalGross: totals.totalGross,
+            position: index,
+            isOptional: item.isOptional || false,
+            isSelected: true,
+            minQuantity: item.minQuantity || 1,
+            maxQuantity: item.maxQuantity || 100,
+        };
+    }
+
     async create(userId: string, data: CreateOfferInput) {
-        // Sprawdź, czy klient należy do użytkownika
         const client = await prisma.client.findFirst({
             where: { id: data.clientId, userId },
         });
@@ -66,28 +87,12 @@ export class OffersService {
             throw new Error('CLIENT_NOT_FOUND');
         }
 
-        // Generuj numer oferty
         const number = await generateOfferNumber(userId);
 
-        // Oblicz sumy pozycji
-        const itemsWithTotals: ItemWithTotals[] = data.items.map((item: OfferItemInput, index: number) => {
-            const totals = this.calculateItemTotals(item);
-            return {
-                name: item.name,
-                description: item.description,
-                quantity: item.quantity,
-                unit: item.unit || 'szt.',
-                unitPrice: item.unitPrice,
-                vatRate: item.vatRate || 23,
-                discount: item.discount || 0,
-                totalNet: totals.totalNet,
-                totalVat: totals.totalVat,
-                totalGross: totals.totalGross,
-                position: index,
-            };
-        });
+        const itemsWithTotals = data.items.map((item: OfferItemInput, index: number) =>
+            this.buildItemWithTotals(item, index)
+        );
 
-        // Oblicz sumy oferty
         const totalNet = itemsWithTotals.reduce(
             (sum: Decimal, item: ItemWithTotals) => sum.plus(item.totalNet),
             new Decimal(0)
@@ -139,7 +144,7 @@ export class OffersService {
                     orderBy: { position: 'asc' },
                 },
                 _count: {
-                    select: { followUps: true },
+                    select: { followUps: true, comments: true, views: true },
                 },
             },
         });
@@ -155,7 +160,6 @@ export class OffersService {
 
         const where: Prisma.OfferWhereInput = { userId };
 
-        // Filtrowanie
         if (query.search) {
             where.OR = [
                 { number: { contains: query.search, mode: 'insensitive' } },
@@ -178,7 +182,6 @@ export class OffersService {
             if (query.dateTo) where.createdAt.lte = new Date(query.dateTo);
         }
 
-        // Sortowanie
         const orderBy: Prisma.OfferOrderByWithRelationInput = {};
         const sortBy = query.sortBy || 'createdAt';
         const sortOrder = query.sortOrder || 'desc';
@@ -214,7 +217,6 @@ export class OffersService {
             return null;
         }
 
-        // Jeśli aktualizujemy pozycje, przelicz sumy
         let updateData: Prisma.OfferUpdateInput = {
             title: data.title,
             description: data.description,
@@ -225,7 +227,6 @@ export class OffersService {
             paymentDays: data.paymentDays,
         };
 
-        // Aktualizacja statusu - ustaw odpowiednie daty
         if (data.status) {
             const now = new Date();
             switch (data.status) {
@@ -244,24 +245,10 @@ export class OffersService {
             }
         }
 
-        // Jeśli są nowe pozycje, usuń stare i dodaj nowe
         if (data.items && data.items.length > 0) {
-            const itemsWithTotals: ItemWithTotals[] = data.items.map((item: OfferItemInput, index: number) => {
-                const totals = this.calculateItemTotals(item);
-                return {
-                    name: item.name,
-                    description: item.description,
-                    quantity: item.quantity,
-                    unit: item.unit || 'szt.',
-                    unitPrice: item.unitPrice,
-                    vatRate: item.vatRate || 23,
-                    discount: item.discount || 0,
-                    totalNet: totals.totalNet,
-                    totalVat: totals.totalVat,
-                    totalGross: totals.totalGross,
-                    position: index,
-                };
-            });
+            const itemsWithTotals = data.items.map((item: OfferItemInput, index: number) =>
+                this.buildItemWithTotals(item, index)
+            );
 
             const totalNet = itemsWithTotals.reduce(
                 (sum: Decimal, item: ItemWithTotals) => sum.plus(item.totalNet),
@@ -276,7 +263,6 @@ export class OffersService {
                 new Decimal(0)
             );
 
-            // Transakcja: usuń stare pozycje i dodaj nowe
             return prisma.$transaction(async (tx) => {
                 await tx.offerItem.deleteMany({ where: { offerId: id } });
 
@@ -396,6 +382,10 @@ export class OffersService {
                         totalVat: item.totalVat,
                         totalGross: item.totalGross,
                         position: item.position,
+                        isOptional: item.isOptional,
+                        isSelected: true,
+                        minQuantity: item.minQuantity,
+                        maxQuantity: item.maxQuantity,
                     })),
                 },
             },
@@ -405,7 +395,153 @@ export class OffersService {
             },
         });
     }
+
+    async publishOffer(offerId: string, userId: string) {
+        const offer = await prisma.offer.findFirst({
+            where: { id: offerId, userId },
+            select: {
+                id: true,
+                publicToken: true,
+                isInteractive: true,
+                status: true,
+            },
+        });
+
+        if (!offer) return null;
+
+        if (offer.publicToken && offer.isInteractive) {
+            return {
+                publicToken: offer.publicToken,
+                publicUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/offer/view/${offer.publicToken}`,
+                alreadyPublished: true,
+            };
+        }
+
+        const publicToken = crypto.randomBytes(16).toString('base64url');
+
+        const updated = await prisma.offer.update({
+            where: { id: offerId },
+            data: {
+                publicToken,
+                isInteractive: true,
+                status: offer.status === 'DRAFT' ? 'SENT' : offer.status,
+                sentAt: offer.status === 'DRAFT' ? new Date() : undefined,
+            },
+        });
+
+        return {
+            publicToken: updated.publicToken,
+            publicUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/offer/view/${updated.publicToken}`,
+            alreadyPublished: false,
+        };
+    }
+
+    async unpublishOffer(offerId: string, userId: string) {
+        const offer = await prisma.offer.findFirst({
+            where: { id: offerId, userId },
+        });
+
+        if (!offer) return null;
+
+        await prisma.offer.update({
+            where: { id: offerId },
+            data: {
+                publicToken: null,
+                isInteractive: false,
+            },
+        });
+
+        return true;
+    }
+
+    async getOfferAnalytics(offerId: string, userId: string) {
+        const offer = await prisma.offer.findFirst({
+            where: { id: offerId, userId },
+            select: {
+                id: true,
+                number: true,
+                title: true,
+                status: true,
+                publicToken: true,
+                isInteractive: true,
+                viewCount: true,
+                lastViewedAt: true,
+                acceptedAt: true,
+                rejectedAt: true,
+                clientSelectedData: true,
+                validUntil: true,
+                totalNet: true,
+                totalGross: true,
+                views: {
+                    orderBy: { viewedAt: 'desc' },
+                    take: 50,
+                },
+                interactions: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 100,
+                },
+                comments: {
+                    orderBy: { createdAt: 'asc' },
+                },
+            },
+        });
+
+        if (!offer) return null;
+
+        const uniqueIps = new Set(
+            offer.views.filter((v) => v.ipAddress).map((v) => v.ipAddress)
+        );
+
+        return {
+            ...offer,
+            uniqueVisitors: uniqueIps.size,
+            publicUrl: offer.publicToken
+                ? `${process.env.FRONTEND_URL || 'http://localhost:3000'}/offer/view/${offer.publicToken}`
+                : null,
+        };
+    }
+
+    async getOfferComments(offerId: string, userId: string) {
+        const offer = await prisma.offer.findFirst({
+            where: { id: offerId, userId },
+            select: { id: true },
+        });
+
+        if (!offer) return null;
+
+        return prisma.offerComment.findMany({
+            where: { offerId },
+            orderBy: { createdAt: 'asc' },
+        });
+    }
+
+    async addSellerComment(offerId: string, userId: string, content: string) {
+        const offer = await prisma.offer.findFirst({
+            where: { id: offerId, userId },
+            select: { id: true },
+        });
+
+        if (!offer) return null;
+
+        const [comment] = await prisma.$transaction([
+            prisma.offerComment.create({
+                data: {
+                    offerId,
+                    author: 'SELLER',
+                    content,
+                },
+            }),
+            prisma.offerInteraction.create({
+                data: {
+                    offerId,
+                    type: 'COMMENT',
+                    details: { content, author: 'SELLER' },
+                },
+            }),
+        ]);
+
+        return comment;
+    }
 }
 
-// Eksporty - oba warianty dla kompatybilności
 export const offersService = new OffersService();

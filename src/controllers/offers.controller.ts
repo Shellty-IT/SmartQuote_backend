@@ -112,12 +112,8 @@ export class OffersController {
             const { id } = req.params;
             const userId = req.user!.id;
 
-            // Pobierz ofertę z wszystkimi relacjami + companyInfo
             const offer = await prisma.offer.findFirst({
-                where: {
-                    id,
-                    userId,
-                },
+                where: { id, userId },
                 include: {
                     client: true,
                     items: {
@@ -149,7 +145,6 @@ export class OffersController {
                 return errorResponse(res, 'NOT_FOUND', 'Oferta nie znaleziona', 404);
             }
 
-            // Przekształć dane dla PDF service (dodaj company z companyInfo)
             const pdfOffer = {
                 ...offer,
                 user: {
@@ -159,21 +154,94 @@ export class OffersController {
                 },
             };
 
-            // Generuj PDF
             const pdfBuffer = await pdfService.generateOfferPDF(pdfOffer);
 
-            // Ustaw nagłówki odpowiedzi
             const filename = `Oferta_${offer.number.replace(/\//g, '-')}.pdf`;
 
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
             res.setHeader('Content-Length', pdfBuffer.length);
 
-            // Wyślij PDF
             return res.send(pdfBuffer);
         } catch (error) {
             console.error('[Offers] GeneratePDF error:', error);
             return errorResponse(res, 'PDF_FAILED', 'Nie udało się wygenerować PDF', 500);
+        }
+    }
+
+    async publish(req: AuthenticatedRequest, res: Response) {
+        try {
+            const result = await offersService.publishOffer(req.params.id, req.user!.id);
+
+            if (!result) {
+                return errorResponse(res, 'NOT_FOUND', 'Oferta nie znaleziona', 404);
+            }
+
+            return successResponse(res, result);
+        } catch (error) {
+            console.error('[Offers] Publish error:', error);
+            return errorResponse(res, 'PUBLISH_FAILED', 'Nie udało się opublikować oferty', 500);
+        }
+    }
+
+    async unpublish(req: AuthenticatedRequest, res: Response) {
+        try {
+            const result = await offersService.unpublishOffer(req.params.id, req.user!.id);
+
+            if (!result) {
+                return errorResponse(res, 'NOT_FOUND', 'Oferta nie znaleziona', 404);
+            }
+
+            return successResponse(res, { unpublished: true });
+        } catch (error) {
+            console.error('[Offers] Unpublish error:', error);
+            return errorResponse(res, 'UNPUBLISH_FAILED', 'Nie udało się dezaktywować linku', 500);
+        }
+    }
+
+    async getAnalytics(req: AuthenticatedRequest, res: Response) {
+        try {
+            const analytics = await offersService.getOfferAnalytics(req.params.id, req.user!.id);
+
+            if (!analytics) {
+                return errorResponse(res, 'NOT_FOUND', 'Oferta nie znaleziona', 404);
+            }
+
+            return successResponse(res, analytics);
+        } catch (error) {
+            console.error('[Offers] Analytics error:', error);
+            return errorResponse(res, 'ANALYTICS_FAILED', 'Nie udało się pobrać analityki', 500);
+        }
+    }
+
+    async getComments(req: AuthenticatedRequest, res: Response) {
+        try {
+            const comments = await offersService.getOfferComments(req.params.id, req.user!.id);
+
+            if (comments === null) {
+                return errorResponse(res, 'NOT_FOUND', 'Oferta nie znaleziona', 404);
+            }
+
+            return successResponse(res, comments);
+        } catch (error) {
+            console.error('[Offers] GetComments error:', error);
+            return errorResponse(res, 'FETCH_FAILED', 'Nie udało się pobrać komentarzy', 500);
+        }
+    }
+
+    async addComment(req: AuthenticatedRequest, res: Response) {
+        try {
+            const { content } = req.body;
+            const comment = await offersService.addSellerComment(req.params.id, req.user!.id, content);
+
+            if (!comment) {
+                return errorResponse(res, 'NOT_FOUND', 'Oferta nie znaleziona', 404);
+            }
+
+            return successResponse(res, comment, 201);
+        } catch (error) {
+            console.error('[Offers] AddComment error:', error);
+            return errorResponse(res, 'COMMENT_FAILED', 'Nie udało się dodać komentarza', 500);
         }
     }
 }

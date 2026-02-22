@@ -7,7 +7,6 @@ import {
     Priority
 } from '@prisma/client';
 
-// Rozszerzenie Express Request o user (globalne)
 declare global {
     namespace Express {
         interface Request {
@@ -21,7 +20,6 @@ declare global {
     }
 }
 
-// Eksportowany typ do użycia w kontrolerach
 export interface AuthenticatedRequest extends Request {
     user?: {
         id: string;
@@ -31,9 +29,6 @@ export interface AuthenticatedRequest extends Request {
     };
 }
 
-// ============================================
-// Typy dla paginacji i zapytań
-// ============================================
 export interface PaginationQuery {
     page?: string;
     limit?: string;
@@ -42,9 +37,6 @@ export interface PaginationQuery {
     sortOrder?: 'asc' | 'desc';
 }
 
-// ============================================
-// Typy dla Client
-// ============================================
 export interface CreateClientInput {
     type?: 'PERSON' | 'COMPANY';
     name: string;
@@ -78,9 +70,6 @@ export interface UpdateClientInput {
     isActive?: boolean;
 }
 
-// ============================================
-// Typy dla Offer
-// ============================================
 export interface OfferItemInput {
     name: string;
     description?: string;
@@ -89,6 +78,9 @@ export interface OfferItemInput {
     unitPrice: number;
     vatRate?: number;
     discount?: number;
+    isOptional?: boolean;
+    minQuantity?: number;
+    maxQuantity?: number;
 }
 
 export interface CreateOfferInput {
@@ -113,9 +105,31 @@ export interface UpdateOfferInput {
     items?: OfferItemInput[];
 }
 
-// ============================================
-// Typy dla Contract
-// ============================================
+export interface PublicOfferAcceptInput {
+    confirmationChecked: boolean;
+    selectedItems: Array<{
+        id: string;
+        isSelected: boolean;
+        quantity: number;
+    }>;
+}
+
+export interface PublicOfferRejectInput {
+    reason?: string;
+}
+
+export interface PublicOfferCommentInput {
+    content: string;
+}
+
+export interface PublicOfferSelectionInput {
+    items: Array<{
+        id: string;
+        isSelected: boolean;
+        quantity: number;
+    }>;
+}
+
 export interface ContractItemInput {
     name: string;
     description?: string;
@@ -164,14 +178,10 @@ export interface GetContractsParams {
     search?: string;
 }
 
-// ============================================
-// Typy dla Follow-up - re-eksport z Prisma
-// ============================================
 export type FollowUpTypeValue = FollowUpType;
 export type FollowUpStatusValue = FollowUpStatus;
 export type PriorityValue = Priority;
 
-// Stałe dla walidacji - muszą być zgodne z Prisma enum
 export const FOLLOW_UP_TYPES: FollowUpType[] = ['CALL', 'EMAIL', 'MEETING', 'TASK', 'REMINDER', 'OTHER'];
 export const FOLLOW_UP_STATUSES: FollowUpStatus[] = ['PENDING', 'COMPLETED', 'CANCELLED', 'OVERDUE'];
 export const PRIORITIES: Priority[] = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
@@ -220,9 +230,6 @@ export interface UpdateFollowUpInput {
     completedAt?: Date | string;
 }
 
-// ============================================
-// Typy dla AI
-// ============================================
 export interface AIMessage {
     role: 'user' | 'assistant';
     content: string;

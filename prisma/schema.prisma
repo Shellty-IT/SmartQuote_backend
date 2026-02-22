@@ -9,9 +9,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================
-// USER - Użytkownik systemu
-// ============================================
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -24,7 +21,6 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Relacje
   clients     Client[]
   offers      Offer[]
   followUps   FollowUp[]
@@ -36,25 +32,19 @@ model User {
   @@map("users")
 }
 
-// ============================================
-// USER_SETTINGS - Ustawienia użytkownika
-// ============================================
 model UserSettings {
   id     String @id @default(cuid())
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Wygląd
   theme    String @default("light")
   language String @default("pl")
 
-  // Powiadomienia
   emailNotifications Boolean @default(true)
   offerNotifications Boolean @default(true)
   followUpReminders  Boolean @default(true)
   weeklyReport       Boolean @default(true)
 
-  // AI
   aiTone            String  @default("professional")
   aiAutoSuggestions Boolean @default(true)
 
@@ -64,9 +54,6 @@ model UserSettings {
   @@map("user_settings")
 }
 
-// ============================================
-// COMPANY_INFO - Dane firmy użytkownika
-// ============================================
 model CompanyInfo {
   id     String @id @default(cuid())
   userId String @unique
@@ -96,9 +83,6 @@ model CompanyInfo {
   @@map("company_info")
 }
 
-// ============================================
-// API_KEY - Klucze API użytkownika
-// ============================================
 model ApiKey {
   id     String @id @default(cuid())
   userId String
@@ -119,9 +103,6 @@ model ApiKey {
   @@map("api_keys")
 }
 
-// ============================================
-// CLIENT - Klient/Kontrahent
-// ============================================
 model Client {
   id         String     @id @default(cuid())
   type       ClientType @default(COMPANY)
@@ -153,9 +134,6 @@ model Client {
   @@map("clients")
 }
 
-// ============================================
-// OFFER - Oferta handlowa
-// ============================================
 model Offer {
   id          String      @id @default(cuid())
   number      String
@@ -178,28 +156,35 @@ model Offer {
   terms       String?
   paymentDays Int     @default(14)
 
+  publicToken        String?  @unique
+  isInteractive      Boolean  @default(false)
+  viewCount          Int      @default(0)
+  lastViewedAt       DateTime?
+  clientSelectedData Json?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   userId    String
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   clientId  String
-  client    Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client    Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
   items     OfferItem[]
   followUps FollowUp[]
   contracts Contract[]
+  views     OfferView[]
+  interactions OfferInteraction[]
+  comments  OfferComment[]
 
   @@unique([userId, number])
   @@index([userId])
   @@index([clientId])
   @@index([status])
   @@index([createdAt])
+  @@index([publicToken])
   @@map("offers")
 }
 
-// ============================================
-// OFFER_ITEM - Pozycja w ofercie
-// ============================================
 model OfferItem {
   id          String   @id @default(cuid())
   name        String
@@ -213,8 +198,14 @@ model OfferItem {
   totalVat    Decimal  @db.Decimal(12, 2)
   totalGross  Decimal  @db.Decimal(12, 2)
   position    Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+
+  isOptional  Boolean  @default(false)
+  isSelected  Boolean  @default(true)
+  minQuantity Int      @default(1)
+  maxQuantity Int      @default(100)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   offerId String
   offer   Offer  @relation(fields: [offerId], references: [id], onDelete: Cascade)
@@ -223,9 +214,44 @@ model OfferItem {
   @@map("offer_items")
 }
 
-// ============================================
-// CONTRACT - Umowa
-// ============================================
+model OfferView {
+  id        String   @id @default(cuid())
+  offerId   String
+  offer     Offer    @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  viewedAt  DateTime @default(now())
+  ipAddress String?
+  userAgent String?
+  duration  Int?
+
+  @@index([offerId])
+  @@map("offer_views")
+}
+
+model OfferInteraction {
+  id        String          @id @default(cuid())
+  offerId   String
+  offer     Offer           @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  type      InteractionType
+  details   Json?
+  createdAt DateTime        @default(now())
+
+  @@index([offerId])
+  @@index([offerId, type])
+  @@map("offer_interactions")
+}
+
+model OfferComment {
+  id        String        @id @default(cuid())
+  offerId   String
+  offer     Offer         @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  author    CommentAuthor
+  content   String
+  createdAt DateTime      @default(now())
+
+  @@index([offerId])
+  @@map("offer_comments")
+}
+
 model Contract {
   id          String         @id @default(cuid())
   number      String
@@ -269,9 +295,6 @@ model Contract {
   @@map("contracts")
 }
 
-// ============================================
-// CONTRACT_ITEM - Pozycja w umowie
-// ============================================
 model ContractItem {
   id          String   @id @default(cuid())
   name        String
@@ -295,9 +318,6 @@ model ContractItem {
   @@map("contract_items")
 }
 
-// ============================================
-// FOLLOW_UP - Przypomnienia i zadania
-// ============================================
 model FollowUp {
   id          String         @id @default(cuid())
   title       String
@@ -329,10 +349,6 @@ model FollowUp {
   @@index([priority])
   @@map("follow_ups")
 }
-
-// ============================================
-// ENUMS
-// ============================================
 
 enum UserRole {
   USER
@@ -384,4 +400,20 @@ enum Priority {
   MEDIUM
   HIGH
   URGENT
+}
+
+enum InteractionType {
+  VIEW
+  ITEM_SELECT
+  ITEM_DESELECT
+  QUANTITY_CHANGE
+  ACCEPT
+  REJECT
+  COMMENT
+  PDF_DOWNLOAD
+}
+
+enum CommentAuthor {
+  CLIENT
+  SELLER
 }
