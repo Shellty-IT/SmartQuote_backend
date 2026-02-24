@@ -1,22 +1,15 @@
+"use strict";
 // smartquote_backend/src/services/publicOffer.service.ts
-
-import prisma from '../lib/prisma';
-import { Decimal } from '@prisma/client/runtime/library';
-import { aiService } from './ai.service';
-
-export class PublicOfferService {
-    private triggerPostMortem(userId: string, offerId: string, outcome: 'ACCEPTED' | 'REJECTED'): void {
-        aiService.generatePostMortem(userId, offerId, outcome)
-            .then(() => {
-                console.log(`✅ Post-mortem generated for public offer ${offerId} [${outcome}]`);
-            })
-            .catch((err) => {
-                console.error(`❌ Post-mortem failed for public offer ${offerId}:`, err);
-            });
-    }
-
-    async getOfferByToken(token: string) {
-        const offer = await prisma.offer.findFirst({
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.publicOfferService = exports.PublicOfferService = void 0;
+const prisma_1 = __importDefault(require("../lib/prisma"));
+const library_1 = require("@prisma/client/runtime/library");
+class PublicOfferService {
+    async getOfferByToken(token) {
+        const offer = await prisma_1.default.offer.findFirst({
             where: { publicToken: token, isInteractive: true },
             include: {
                 items: { orderBy: { position: 'asc' } },
@@ -52,13 +45,11 @@ export class PublicOfferService {
                 },
             },
         });
-
-        if (!offer) return null;
-
+        if (!offer)
+            return null;
         const isExpired = offer.validUntil
             ? new Date(offer.validUntil) < new Date()
             : false;
-
         return {
             expired: isExpired,
             decided: offer.status === 'ACCEPTED' || offer.status === 'REJECTED',
@@ -122,57 +113,47 @@ export class PublicOfferService {
             },
         };
     }
-
-    async registerView(token: string, ipAddress?: string, userAgent?: string) {
-        const offer = await prisma.offer.findFirst({
+    async registerView(token, ipAddress, userAgent) {
+        const offer = await prisma_1.default.offer.findFirst({
             where: { publicToken: token, isInteractive: true },
             select: { id: true, validUntil: true, status: true },
         });
-
-        if (!offer) return null;
-
+        if (!offer)
+            return null;
         if (offer.validUntil && new Date(offer.validUntil) < new Date()) {
             return null;
         }
-
-        const statusUpdate: Record<string, unknown> = {
+        const statusUpdate = {
             viewCount: { increment: 1 },
             lastViewedAt: new Date(),
         };
-
         if (offer.status === 'SENT') {
             statusUpdate.status = 'VIEWED';
         }
-
-        await prisma.$transaction([
-            prisma.offerView.create({
+        await prisma_1.default.$transaction([
+            prisma_1.default.offerView.create({
                 data: {
                     offerId: offer.id,
                     ipAddress: ipAddress || null,
                     userAgent: userAgent || null,
                 },
             }),
-            prisma.offerInteraction.create({
+            prisma_1.default.offerInteraction.create({
                 data: {
                     offerId: offer.id,
                     type: 'VIEW',
                     details: { ipAddress, userAgent },
                 },
             }),
-            prisma.offer.update({
+            prisma_1.default.offer.update({
                 where: { id: offer.id },
                 data: statusUpdate,
             }),
         ]);
-
         return true;
     }
-
-    async acceptOffer(
-        token: string,
-        selectedItems: Array<{ id: string; isSelected: boolean; quantity: number }>
-    ) {
-        const offer = await prisma.offer.findFirst({
+    async acceptOffer(token, selectedItems) {
+        const offer = await prisma_1.default.offer.findFirst({
             where: { publicToken: token, isInteractive: true },
             include: {
                 items: { orderBy: { position: 'asc' } },
@@ -182,51 +163,38 @@ export class PublicOfferService {
                 },
             },
         });
-
-        if (!offer) return { error: 'NOT_FOUND' as const };
-
+        if (!offer)
+            return { error: 'NOT_FOUND' };
         if (offer.status === 'ACCEPTED' || offer.status === 'REJECTED') {
-            return { error: 'ALREADY_DECIDED' as const };
+            return { error: 'ALREADY_DECIDED' };
         }
-
         if (offer.validUntil && new Date(offer.validUntil) < new Date()) {
-            return { error: 'EXPIRED' as const };
+            return { error: 'EXPIRED' };
         }
-
-        let totalNet = new Decimal(0);
-        let totalVat = new Decimal(0);
-        let totalGross = new Decimal(0);
-
+        let totalNet = new library_1.Decimal(0);
+        let totalVat = new library_1.Decimal(0);
+        let totalGross = new library_1.Decimal(0);
         const clientSelectedData = offer.items.map((item) => {
             const selection = selectedItems.find((s) => s.id === item.id);
-
             const isSelected = item.isOptional
                 ? (selection?.isSelected ?? item.isSelected)
                 : true;
-
             let quantity = item.quantity;
             if (selection && typeof selection.quantity === 'number' && item.isOptional) {
-                const clampedQty = Math.min(
-                    Math.max(selection.quantity, item.minQuantity),
-                    item.maxQuantity
-                );
-                quantity = new Decimal(clampedQty);
+                const clampedQty = Math.min(Math.max(selection.quantity, item.minQuantity), item.maxQuantity);
+                quantity = new library_1.Decimal(clampedQty);
             }
-
-            const discount = item.discount || new Decimal(0);
-            const discountMultiplier = new Decimal(1).minus(discount.dividedBy(100));
+            const discount = item.discount || new library_1.Decimal(0);
+            const discountMultiplier = new library_1.Decimal(1).minus(discount.dividedBy(100));
             const effectivePrice = item.unitPrice.times(discountMultiplier);
-
-            const itemNet = isSelected ? quantity.times(effectivePrice) : new Decimal(0);
+            const itemNet = isSelected ? quantity.times(effectivePrice) : new library_1.Decimal(0);
             const itemVat = itemNet.times(item.vatRate.dividedBy(100));
             const itemGross = itemNet.plus(itemVat);
-
             if (isSelected) {
                 totalNet = totalNet.plus(itemNet);
                 totalVat = totalVat.plus(itemVat);
                 totalGross = totalGross.plus(itemGross);
             }
-
             return {
                 itemId: item.id,
                 name: item.name,
@@ -240,17 +208,16 @@ export class PublicOfferService {
                 brutto: itemGross.toDecimalPlaces(2).toNumber(),
             };
         });
-
-        await prisma.$transaction([
-            prisma.offer.update({
+        await prisma_1.default.$transaction([
+            prisma_1.default.offer.update({
                 where: { id: offer.id },
                 data: {
                     status: 'ACCEPTED',
                     acceptedAt: new Date(),
-                    clientSelectedData: clientSelectedData as unknown as any,
+                    clientSelectedData: clientSelectedData,
                 },
             }),
-            prisma.offerInteraction.create({
+            prisma_1.default.offerInteraction.create({
                 data: {
                     offerId: offer.id,
                     type: 'ACCEPT',
@@ -263,11 +230,8 @@ export class PublicOfferService {
                 },
             }),
         ]);
-
-        this.triggerPostMortem(offer.user.id, offer.id, 'ACCEPTED');
-
         return {
-            success: true as const,
+            success: true,
             data: {
                 offerId: offer.id,
                 offerNumber: offer.number,
@@ -285,9 +249,8 @@ export class PublicOfferService {
             },
         };
     }
-
-    async rejectOffer(token: string, reason?: string) {
-        const offer = await prisma.offer.findFirst({
+    async rejectOffer(token, reason) {
+        const offer = await prisma_1.default.offer.findFirst({
             where: { publicToken: token, isInteractive: true },
             include: {
                 client: { select: { id: true, name: true, company: true } },
@@ -296,26 +259,23 @@ export class PublicOfferService {
                 },
             },
         });
-
-        if (!offer) return { error: 'NOT_FOUND' as const };
-
+        if (!offer)
+            return { error: 'NOT_FOUND' };
         if (offer.status === 'ACCEPTED' || offer.status === 'REJECTED') {
-            return { error: 'ALREADY_DECIDED' as const };
+            return { error: 'ALREADY_DECIDED' };
         }
-
         if (offer.validUntil && new Date(offer.validUntil) < new Date()) {
-            return { error: 'EXPIRED' as const };
+            return { error: 'EXPIRED' };
         }
-
-        await prisma.$transaction([
-            prisma.offer.update({
+        await prisma_1.default.$transaction([
+            prisma_1.default.offer.update({
                 where: { id: offer.id },
                 data: {
                     status: 'REJECTED',
                     rejectedAt: new Date(),
                 },
             }),
-            prisma.offerInteraction.create({
+            prisma_1.default.offerInteraction.create({
                 data: {
                     offerId: offer.id,
                     type: 'REJECT',
@@ -323,11 +283,8 @@ export class PublicOfferService {
                 },
             }),
         ]);
-
-        this.triggerPostMortem(offer.user.id, offer.id, 'REJECTED');
-
         return {
-            success: true as const,
+            success: true,
             data: {
                 offerId: offer.id,
                 offerNumber: offer.number,
@@ -339,9 +296,8 @@ export class PublicOfferService {
             },
         };
     }
-
-    async addComment(token: string, content: string) {
-        const offer = await prisma.offer.findFirst({
+    async addComment(token, content) {
+        const offer = await prisma_1.default.offer.findFirst({
             where: { publicToken: token, isInteractive: true },
             select: {
                 id: true,
@@ -351,22 +307,20 @@ export class PublicOfferService {
                 number: true,
             },
         });
-
-        if (!offer) return null;
-
+        if (!offer)
+            return null;
         if (offer.validUntil && new Date(offer.validUntil) < new Date()) {
             return null;
         }
-
-        const [comment] = await prisma.$transaction([
-            prisma.offerComment.create({
+        const [comment] = await prisma_1.default.$transaction([
+            prisma_1.default.offerComment.create({
                 data: {
                     offerId: offer.id,
                     author: 'CLIENT',
                     content,
                 },
             }),
-            prisma.offerInteraction.create({
+            prisma_1.default.offerInteraction.create({
                 data: {
                     offerId: offer.id,
                     type: 'COMMENT',
@@ -374,39 +328,31 @@ export class PublicOfferService {
                 },
             }),
         ]);
-
         return {
             comment,
             userId: offer.userId,
             offerNumber: offer.number,
         };
     }
-
-    async trackSelection(
-        token: string,
-        items: Array<{ id: string; isSelected: boolean; quantity: number }>
-    ) {
-        const offer = await prisma.offer.findFirst({
+    async trackSelection(token, items) {
+        const offer = await prisma_1.default.offer.findFirst({
             where: { publicToken: token, isInteractive: true },
             select: { id: true, validUntil: true },
         });
-
-        if (!offer) return null;
-
+        if (!offer)
+            return null;
         if (offer.validUntil && new Date(offer.validUntil) < new Date()) {
             return null;
         }
-
-        await prisma.offerInteraction.create({
+        await prisma_1.default.offerInteraction.create({
             data: {
                 offerId: offer.id,
                 type: 'ITEM_SELECT',
                 details: { items },
             },
         });
-
         return true;
     }
 }
-
-export const publicOfferService = new PublicOfferService();
+exports.PublicOfferService = PublicOfferService;
+exports.publicOfferService = new PublicOfferService();

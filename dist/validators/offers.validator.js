@@ -1,5 +1,5 @@
 "use strict";
-// backend/src/validators/offers.validator.ts
+// smartquote_backend/src/validators/offers.validator.ts
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listOffersSchema = exports.getOfferSchema = exports.updateOfferSchema = exports.createOfferSchema = void 0;
 const zod_1 = require("zod");
@@ -20,20 +20,20 @@ const offerItemSchema = zod_1.z.object({
     unitPrice: zod_1.z.number().nonnegative('Cena nie może być ujemna'),
     vatRate: zod_1.z.number().min(0).max(100).optional().default(23),
     discount: zod_1.z.number().min(0).max(100).optional().default(0),
+    isOptional: zod_1.z.boolean().optional().default(false),
+    minQuantity: zod_1.z.number().int().min(1).optional().default(1),
+    maxQuantity: zod_1.z.number().int().min(1).optional().default(100),
 });
-// Funkcja do walidacji daty - akceptuje różne formaty
 const dateSchema = zod_1.z.string()
     .refine((val) => {
     if (!val)
         return true;
-    // Akceptuj format YYYY-MM-DD lub pełny ISO
     const dateRegex = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?)?$/;
     return dateRegex.test(val);
 }, 'Nieprawidłowy format daty')
     .transform((val) => {
     if (!val)
         return null;
-    // Jeśli to tylko data (YYYY-MM-DD), dodaj czas
     if (val.length === 10) {
         return `${val}T23:59:59.000Z`;
     }

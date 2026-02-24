@@ -1,10 +1,11 @@
 "use strict";
-// src/services/offers.service.ts
+// smartquote_backend/src/services/offers.service.ts
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.offersService = exports.OffersService = void 0;
+const crypto_1 = __importDefault(require("crypto"));
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const offerNumber_1 = require("../utils/offerNumber");
 const library_1 = require("@prisma/client/runtime/library");
@@ -14,10 +15,8 @@ class OffersService {
         const unitPrice = new library_1.Decimal(item.unitPrice);
         const vatRate = new library_1.Decimal(item.vatRate || 23);
         const discount = new library_1.Decimal(item.discount || 0);
-        // Cena po rabacie
         const discountMultiplier = new library_1.Decimal(1).minus(discount.dividedBy(100));
         const effectiveUnitPrice = unitPrice.times(discountMultiplier);
-        // Obliczenia
         const totalNet = quantity.times(effectiveUnitPrice);
         const totalVat = totalNet.times(vatRate.dividedBy(100));
         const totalGross = totalNet.plus(totalVat);
@@ -27,34 +26,35 @@ class OffersService {
             totalGross: totalGross.toDecimalPlaces(2),
         };
     }
+    buildItemWithTotals(item, index) {
+        const totals = this.calculateItemTotals(item);
+        return {
+            name: item.name,
+            description: item.description,
+            quantity: item.quantity,
+            unit: item.unit || 'szt.',
+            unitPrice: item.unitPrice,
+            vatRate: item.vatRate || 23,
+            discount: item.discount || 0,
+            totalNet: totals.totalNet,
+            totalVat: totals.totalVat,
+            totalGross: totals.totalGross,
+            position: index,
+            isOptional: item.isOptional || false,
+            isSelected: true,
+            minQuantity: item.minQuantity || 1,
+            maxQuantity: item.maxQuantity || 100,
+        };
+    }
     async create(userId, data) {
-        // Sprawdź, czy klient należy do użytkownika
         const client = await prisma_1.default.client.findFirst({
             where: { id: data.clientId, userId },
         });
         if (!client) {
             throw new Error('CLIENT_NOT_FOUND');
         }
-        // Generuj numer oferty
         const number = await (0, offerNumber_1.generateOfferNumber)(userId);
-        // Oblicz sumy pozycji
-        const itemsWithTotals = data.items.map((item, index) => {
-            const totals = this.calculateItemTotals(item);
-            return {
-                name: item.name,
-                description: item.description,
-                quantity: item.quantity,
-                unit: item.unit || 'szt.',
-                unitPrice: item.unitPrice,
-                vatRate: item.vatRate || 23,
-                discount: item.discount || 0,
-                totalNet: totals.totalNet,
-                totalVat: totals.totalVat,
-                totalGross: totals.totalGross,
-                position: index,
-            };
-        });
-        // Oblicz sumy oferty
+        const itemsWithTotals = data.items.map((item, index) => this.buildItemWithTotals(item, index));
         const totalNet = itemsWithTotals.reduce((sum, item) => sum.plus(item.totalNet), new library_1.Decimal(0));
         const totalVat = itemsWithTotals.reduce((sum, item) => sum.plus(item.totalVat), new library_1.Decimal(0));
         const totalGross = itemsWithTotals.reduce((sum, item) => sum.plus(item.totalGross), new library_1.Decimal(0));
@@ -95,7 +95,7 @@ class OffersService {
                     orderBy: { position: 'asc' },
                 },
                 _count: {
-                    select: { followUps: true },
+                    select: { followUps: true, comments: true, views: true },
                 },
             },
         });
@@ -105,7 +105,6 @@ class OffersService {
         const limit = parseInt(query.limit || '20', 10);
         const skip = (page - 1) * limit;
         const where = { userId };
-        // Filtrowanie
         if (query.search) {
             where.OR = [
                 { number: { contains: query.search, mode: 'insensitive' } },
@@ -126,7 +125,6 @@ class OffersService {
             if (query.dateTo)
                 where.createdAt.lte = new Date(query.dateTo);
         }
-        // Sortowanie
         const orderBy = {};
         const sortBy = query.sortBy || 'createdAt';
         const sortOrder = query.sortOrder || 'desc';
@@ -157,7 +155,6 @@ class OffersService {
         if (!existing) {
             return null;
         }
-        // Jeśli aktualizujemy pozycje, przelicz sumy
         let updateData = {
             title: data.title,
             description: data.description,
@@ -167,7 +164,6 @@ class OffersService {
             terms: data.terms,
             paymentDays: data.paymentDays,
         };
-        // Aktualizacja statusu - ustaw odpowiednie daty
         if (data.status) {
             const now = new Date();
             switch (data.status) {
@@ -185,28 +181,11 @@ class OffersService {
                     break;
             }
         }
-        // Jeśli są nowe pozycje, usuń stare i dodaj nowe
         if (data.items && data.items.length > 0) {
-            const itemsWithTotals = data.items.map((item, index) => {
-                const totals = this.calculateItemTotals(item);
-                return {
-                    name: item.name,
-                    description: item.description,
-                    quantity: item.quantity,
-                    unit: item.unit || 'szt.',
-                    unitPrice: item.unitPrice,
-                    vatRate: item.vatRate || 23,
-                    discount: item.discount || 0,
-                    totalNet: totals.totalNet,
-                    totalVat: totals.totalVat,
-                    totalGross: totals.totalGross,
-                    position: index,
-                };
-            });
+            const itemsWithTotals = data.items.map((item, index) => this.buildItemWithTotals(item, index));
             const totalNet = itemsWithTotals.reduce((sum, item) => sum.plus(item.totalNet), new library_1.Decimal(0));
             const totalVat = itemsWithTotals.reduce((sum, item) => sum.plus(item.totalVat), new library_1.Decimal(0));
             const totalGross = itemsWithTotals.reduce((sum, item) => sum.plus(item.totalGross), new library_1.Decimal(0));
-            // Transakcja: usuń stare pozycje i dodaj nowe
             return prisma_1.default.$transaction(async (tx) => {
                 await tx.offerItem.deleteMany({ where: { offerId: id } });
                 return tx.offer.update({
@@ -312,6 +291,10 @@ class OffersService {
                         totalVat: item.totalVat,
                         totalGross: item.totalGross,
                         position: item.position,
+                        isOptional: item.isOptional,
+                        isSelected: true,
+                        minQuantity: item.minQuantity,
+                        maxQuantity: item.maxQuantity,
                     })),
                 },
             },
@@ -321,7 +304,135 @@ class OffersService {
             },
         });
     }
+    async publishOffer(offerId, userId) {
+        const offer = await prisma_1.default.offer.findFirst({
+            where: { id: offerId, userId },
+            select: {
+                id: true,
+                publicToken: true,
+                isInteractive: true,
+                status: true,
+            },
+        });
+        if (!offer)
+            return null;
+        if (offer.publicToken && offer.isInteractive) {
+            return {
+                publicToken: offer.publicToken,
+                publicUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/offer/view/${offer.publicToken}`,
+                alreadyPublished: true,
+            };
+        }
+        const publicToken = crypto_1.default.randomBytes(16).toString('base64url');
+        const updated = await prisma_1.default.offer.update({
+            where: { id: offerId },
+            data: {
+                publicToken,
+                isInteractive: true,
+                status: offer.status === 'DRAFT' ? 'SENT' : offer.status,
+                sentAt: offer.status === 'DRAFT' ? new Date() : undefined,
+            },
+        });
+        return {
+            publicToken: updated.publicToken,
+            publicUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/offer/view/${updated.publicToken}`,
+            alreadyPublished: false,
+        };
+    }
+    async unpublishOffer(offerId, userId) {
+        const offer = await prisma_1.default.offer.findFirst({
+            where: { id: offerId, userId },
+        });
+        if (!offer)
+            return null;
+        await prisma_1.default.offer.update({
+            where: { id: offerId },
+            data: {
+                publicToken: null,
+                isInteractive: false,
+            },
+        });
+        return true;
+    }
+    async getOfferAnalytics(offerId, userId) {
+        const offer = await prisma_1.default.offer.findFirst({
+            where: { id: offerId, userId },
+            select: {
+                id: true,
+                number: true,
+                title: true,
+                status: true,
+                publicToken: true,
+                isInteractive: true,
+                viewCount: true,
+                lastViewedAt: true,
+                acceptedAt: true,
+                rejectedAt: true,
+                clientSelectedData: true,
+                validUntil: true,
+                totalNet: true,
+                totalGross: true,
+                views: {
+                    orderBy: { viewedAt: 'desc' },
+                    take: 50,
+                },
+                interactions: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 100,
+                },
+                comments: {
+                    orderBy: { createdAt: 'asc' },
+                },
+            },
+        });
+        if (!offer)
+            return null;
+        const uniqueIps = new Set(offer.views.filter((v) => v.ipAddress).map((v) => v.ipAddress));
+        return {
+            ...offer,
+            uniqueVisitors: uniqueIps.size,
+            publicUrl: offer.publicToken
+                ? `${process.env.FRONTEND_URL || 'http://localhost:3000'}/offer/view/${offer.publicToken}`
+                : null,
+        };
+    }
+    async getOfferComments(offerId, userId) {
+        const offer = await prisma_1.default.offer.findFirst({
+            where: { id: offerId, userId },
+            select: { id: true },
+        });
+        if (!offer)
+            return null;
+        return prisma_1.default.offerComment.findMany({
+            where: { offerId },
+            orderBy: { createdAt: 'asc' },
+        });
+    }
+    async addSellerComment(offerId, userId, content) {
+        const offer = await prisma_1.default.offer.findFirst({
+            where: { id: offerId, userId },
+            select: { id: true },
+        });
+        if (!offer)
+            return null;
+        const [comment] = await prisma_1.default.$transaction([
+            prisma_1.default.offerComment.create({
+                data: {
+                    offerId,
+                    author: 'SELLER',
+                    content,
+                },
+            }),
+            prisma_1.default.offerInteraction.create({
+                data: {
+                    offerId,
+                    type: 'COMMENT',
+                    details: { content, author: 'SELLER' },
+                },
+            }),
+        ]);
+        return comment;
+    }
 }
 exports.OffersService = OffersService;
-// Eksporty - oba warianty dla kompatybilności
 exports.offersService = new OffersService();
