@@ -1,5 +1,7 @@
-// src/services/ai.service.ts
+// smartquote_backend/src/services/ai.service.ts
+
 import { GoogleGenAI } from '@google/genai';
+import { Prisma } from '@prisma/client';
 import { config } from '../config';
 import prisma from '../lib/prisma';
 import {
@@ -11,7 +13,7 @@ import {
     GeneratedOffer,
     ClientAnalysis,
     EmailGenerationContext,
-    EmailType
+    EmailType,
 } from '../types';
 
 const priorityLabels: Record<string, string> = {
@@ -53,9 +55,6 @@ class AIService {
         }
     }
 
-    /**
-     * Pobiera kontekst użytkownika z bazy danych
-     */
     async getUserContext(userId: string): Promise<AIContext> {
         const [clients, offers, contracts, followUps] = await Promise.all([
             prisma.client.findMany({
@@ -114,14 +113,13 @@ class AIService {
             }),
         ]);
 
-        // Statystyki
         const stats: AIStats = {
             totalClients: await prisma.client.count({ where: { userId } }),
             activeOffers: await prisma.offer.count({
-                where: { userId, status: { in: ['DRAFT', 'SENT', 'NEGOTIATION'] } }
+                where: { userId, status: { in: ['DRAFT', 'SENT', 'NEGOTIATION'] } },
             }),
             pendingFollowUps: await prisma.followUp.count({
-                where: { userId, status: 'PENDING', dueDate: { lte: new Date() } }
+                where: { userId, status: 'PENDING', dueDate: { lte: new Date() } },
             }),
             monthlyRevenue: await this.calculateMonthlyRevenue(userId),
         };
@@ -146,9 +144,6 @@ class AIService {
         return result._sum.totalGross?.toNumber() || 0;
     }
 
-    /**
-     * Buduje system prompt z kontekstem użytkownika
-     */
     private buildSystemPrompt(context: AIContext): string {
         return `Jesteś SmartQuote AI - inteligentnym asystentem do zarządzania ofertami, umowami i relacjami z klientami.
 
@@ -190,14 +185,8 @@ ZASADY:
 - Używaj polskich nazw dla statusów i priorytetów`;
     }
 
-    /**
-     * Główna funkcja czatu z AI
-     */
     async chat(userId: string, message: string, conversationHistory: AIMessage[] = []): Promise<AIResponse> {
-        console.log('🤖 AI Chat called:', { userId, messageLength: message.length });
-
         if (!this.ai) {
-            console.error('❌ AI not initialized - missing API key');
             return {
                 message: '⚠️ AI Asystent nie jest skonfigurowany. Dodaj GEMINI_API_KEY do zmiennych środowiskowych.',
                 suggestions: ['Skontaktuj się z administratorem'],
@@ -205,20 +194,11 @@ ZASADY:
         }
 
         try {
-            // Pobierz kontekst użytkownika
             const context = await this.getUserContext(userId);
-            console.log('📊 User context loaded:', {
-                clients: context.clients?.length,
-                offers: context.offers?.length
-            });
-
-            // Zbuduj pełną wiadomość z kontekstem
             const systemPrompt = this.buildSystemPrompt(context);
 
-            // Przygotuj historię konwersacji
             let fullPrompt = systemPrompt + '\n\n';
 
-            // Dodaj poprzednie wiadomości z historii
             if (conversationHistory.length > 0) {
                 fullPrompt += 'POPRZEDNIA ROZMOWA:\n';
                 conversationHistory.forEach(msg => {
@@ -230,18 +210,12 @@ ZASADY:
 
             fullPrompt += `Użytkownik: ${message}\n\nAsystent:`;
 
-            console.log('💬 Sending message to Gemini...');
-
-            // Wyślij wiadomość do Gemini
             const response = await this.ai.models.generateContent({
                 model: config.gemini.model,
                 contents: fullPrompt,
             });
 
             const responseText = response.text || '';
-            console.log('✅ Gemini response received:', responseText.substring(0, 100) + '...');
-
-            // Parsuj odpowiedź i wyciągnij akcje
             const { cleanMessage, actions } = this.parseActions(responseText);
             const suggestions = this.generateSuggestions(message, context);
 
@@ -283,14 +257,10 @@ ZASADY:
         }
     }
 
-    /**
-     * Parsuje odpowiedź AI i wyciąga akcje
-     */
     private parseActions(response: string): { cleanMessage: string; actions: AIAction[] } {
         const actions: AIAction[] = [];
         let cleanMessage = response;
 
-        // Szukaj tagów akcji [AKCJA:typ]
         const actionRegex = /\[AKCJA:([\w_]+)(?::([^\]]+))?\]/g;
         let match;
 
@@ -335,9 +305,6 @@ ZASADY:
         }
     }
 
-    /**
-     * Generuje sugestie kolejnych pytań
-     */
     private generateSuggestions(message: string, context: AIContext): string[] {
         const suggestions: string[] = [];
         const lowerMessage = message.toLowerCase();
@@ -356,7 +323,6 @@ ZASADY:
             suggestions.push(`Mam ${context.stats.pendingFollowUps} zaległych follow-upów. Co powinienem zrobić?`);
         }
 
-        // Domyślne sugestie
         if (suggestions.length === 0) {
             suggestions.push('Pomóż mi stworzyć ofertę');
             suggestions.push('Pokaż statystyki sprzedaży');
@@ -366,9 +332,6 @@ ZASADY:
         return suggestions.slice(0, 3);
     }
 
-    /**
-     * Generuje ofertę na podstawie opisu
-     */
     async generateOffer(userId: string, description: string, clientId?: string): Promise<GeneratedOffer> {
         if (!this.ai) {
             throw new Error('AI nie jest skonfigurowany');
@@ -409,22 +372,18 @@ Pamiętaj:
 
             const responseText = response.text || '';
 
-            // Wyciągnij JSON z odpowiedzi
             const jsonMatch = responseText.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
                 return JSON.parse(jsonMatch[0]) as GeneratedOffer;
             }
 
             throw new Error('Nie udało się wygenerować oferty');
-        } catch (error) {
+        } catch (error: unknown) {
             console.error('Generate offer error:', error);
             throw error;
         }
     }
 
-    /**
-     * Generuje treść emaila
-     */
     async generateEmail(userId: string, type: EmailType, context: EmailGenerationContext): Promise<string> {
         if (!this.ai) {
             throw new Error('AI nie jest skonfigurowany');
@@ -456,9 +415,6 @@ Zasady:
         return response.text || '';
     }
 
-    /**
-     * Analizuje klienta i sugeruje działania
-     */
     async analyzeClient(userId: string, clientId: string): Promise<ClientAnalysis> {
         if (!this.ai) {
             throw new Error('AI nie jest skonfigurowany');
@@ -517,7 +473,6 @@ Zwróć TYLKO JSON (bez żadnego dodatkowego tekstu, bez markdown) w formacie:
             return JSON.parse(jsonMatch[0]) as ClientAnalysis;
         }
 
-        // Fallback
         return {
             score: 5,
             potential: 'średni',
@@ -528,13 +483,140 @@ Zwróć TYLKO JSON (bez żadnego dodatkowego tekstu, bez markdown) w formacie:
         };
     }
 
-    /**
-     * Czyści historię konwersacji
-     */
+    async generatePostMortem(userId: string, offerId: string, outcome: 'ACCEPTED' | 'REJECTED'): Promise<void> {
+        const existing = await prisma.offerLegacyInsight.findFirst({
+            where: { offerId, userId },
+        });
+
+        if (existing) {
+            console.log(`⏭️ Post-mortem already exists for offer ${offerId}`);
+            return;
+        }
+
+        const offer = await prisma.offer.findFirst({
+            where: { id: offerId, userId },
+            include: {
+                items: { orderBy: { position: 'asc' } },
+                client: { select: { name: true, company: true, type: true } },
+                interactions: { orderBy: { createdAt: 'asc' }, take: 50 },
+                comments: { orderBy: { createdAt: 'asc' } },
+                views: true,
+            },
+        });
+
+        if (!offer) {
+            console.error(`❌ Post-mortem: offer ${offerId} not found`);
+            return;
+        }
+
+        const fallbackInsight = {
+            summary: `Oferta ${offer.number} została ${outcome === 'ACCEPTED' ? 'zaakceptowana' : 'odrzucona'}.`,
+            keyLessons: [],
+            pricingInsight: 'Brak danych AI do analizy cenowej.',
+            improvementSuggestions: [],
+            industryNote: '',
+        };
+
+        if (!this.ai) {
+            await prisma.offerLegacyInsight.create({
+                data: {
+                    offerId,
+                    userId,
+                    outcome,
+                    insights: fallbackInsight as unknown as Prisma.InputJsonValue,
+                },
+            });
+            return;
+        }
+
+        const interactionTimeline = offer.interactions.map(i => ({
+            type: i.type,
+            createdAt: i.createdAt.toISOString(),
+        }));
+
+        const commentsText = offer.comments.map(c =>
+            `[${c.author}] ${c.content}`
+        ).join('\n') || 'Brak komentarzy';
+
+        const itemsList = offer.items.map(item =>
+            `- ${item.name}: ${item.unitPrice} PLN × ${item.quantity} ${item.unit} (VAT ${item.vatRate}%)${item.isOptional ? ' [opcjonalny]' : ''}`
+        ).join('\n');
+
+        const prompt = `Przeanalizuj zakończoną ofertę handlową i wyciągnij wnioski na przyszłość.
+
+OFERTA: ${offer.number} — ${offer.title}
+WYNIK: ${outcome === 'ACCEPTED' ? 'ZAAKCEPTOWANA' : 'ODRZUCONA'}
+KLIENT: ${offer.client.name}${offer.client.company ? ` (${offer.client.company})` : ''} — typ: ${offer.client.type}
+WARTOŚĆ: ${offer.totalGross} PLN brutto
+
+POZYCJE:
+${itemsList}
+
+LICZBA WYŚWIETLEŃ: ${offer.views.length}
+TIMELINE INTERAKCJI (${interactionTimeline.length}):
+${interactionTimeline.slice(0, 20).map(i => `${i.type} @ ${i.createdAt}`).join('\n')}
+
+KOMENTARZE:
+${commentsText}
+
+Zwróć TYLKO JSON (bez markdown):
+{
+  "summary": "Krótkie 2-3 zdaniowe podsumowanie co się wydarzyło",
+  "keyLessons": ["Lekcja 1", "Lekcja 2"],
+  "pricingInsight": "Wnioski dotyczące wyceny — czy ceny były adekwatne",
+  "improvementSuggestions": ["Sugestia 1", "Sugestia 2"],
+  "industryNote": "Obserwacja dot. branży lub typu klienta"
+}`;
+
+        try {
+            const response = await this.ai.models.generateContent({
+                model: config.gemini.model,
+                contents: prompt,
+            });
+
+            const responseText = response.text || '';
+            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+
+            const insight = jsonMatch
+                ? JSON.parse(jsonMatch[0])
+                : fallbackInsight;
+
+            await prisma.offerLegacyInsight.create({
+                data: {
+                    offerId,
+                    userId,
+                    outcome,
+                    insights: insight as unknown as Prisma.InputJsonValue,
+                },
+            });
+
+            const { notificationService } = await import('./notification.service');
+            notificationService.aiInsight(userId, {
+                offerId,
+                offerNumber: offer.number,
+                outcome,
+            }).catch((err: unknown) => {
+                console.error('❌ AI Insight notification failed:', err);
+            });
+
+            console.log(`✅ Post-mortem saved for offer ${offer.number} [${outcome}]`);
+        } catch (error: unknown) {
+            console.error('❌ Post-mortem AI analysis failed, saving fallback:', error);
+
+            await prisma.offerLegacyInsight.create({
+                data: {
+                    offerId,
+                    userId,
+                    outcome,
+                    insights: fallbackInsight as unknown as Prisma.InputJsonValue,
+                },
+            });
+        }
+    }
+
     clearConversationHistory(userId: string): void {
         this.conversationHistories.delete(userId);
     }
 }
 
 export const aiService = new AIService();
-export default aiService;

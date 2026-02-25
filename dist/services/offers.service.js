@@ -9,7 +9,17 @@ const crypto_1 = __importDefault(require("crypto"));
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const offerNumber_1 = require("../utils/offerNumber");
 const library_1 = require("@prisma/client/runtime/library");
+const ai_service_1 = require("./ai.service");
 class OffersService {
+    triggerPostMortem(userId, offerId, outcome) {
+        ai_service_1.aiService.generatePostMortem(userId, offerId, outcome)
+            .then(() => {
+            console.log(`✅ Post-mortem generated for offer ${offerId} [${outcome}] (manual)`);
+        })
+            .catch((err) => {
+            console.error(`❌ Post-mortem failed for offer ${offerId}:`, err);
+        });
+    }
     calculateItemTotals(item) {
         const quantity = new library_1.Decimal(item.quantity);
         const unitPrice = new library_1.Decimal(item.unitPrice);
@@ -155,6 +165,7 @@ class OffersService {
         if (!existing) {
             return null;
         }
+        const previousStatus = existing.status;
         let updateData = {
             title: data.title,
             description: data.description,
@@ -181,12 +192,13 @@ class OffersService {
                     break;
             }
         }
+        let result;
         if (data.items && data.items.length > 0) {
             const itemsWithTotals = data.items.map((item, index) => this.buildItemWithTotals(item, index));
             const totalNet = itemsWithTotals.reduce((sum, item) => sum.plus(item.totalNet), new library_1.Decimal(0));
             const totalVat = itemsWithTotals.reduce((sum, item) => sum.plus(item.totalVat), new library_1.Decimal(0));
             const totalGross = itemsWithTotals.reduce((sum, item) => sum.plus(item.totalGross), new library_1.Decimal(0));
-            return prisma_1.default.$transaction(async (tx) => {
+            result = await prisma_1.default.$transaction(async (tx) => {
                 await tx.offerItem.deleteMany({ where: { offerId: id } });
                 return tx.offer.update({
                     where: { id },
@@ -206,14 +218,23 @@ class OffersService {
                 });
             });
         }
-        return prisma_1.default.offer.update({
-            where: { id },
-            data: updateData,
-            include: {
-                client: true,
-                items: { orderBy: { position: 'asc' } },
-            },
-        });
+        else {
+            result = await prisma_1.default.offer.update({
+                where: { id },
+                data: updateData,
+                include: {
+                    client: true,
+                    items: { orderBy: { position: 'asc' } },
+                },
+            });
+        }
+        const isTerminalChange = data.status &&
+            (data.status === 'ACCEPTED' || data.status === 'REJECTED') &&
+            previousStatus !== data.status;
+        if (isTerminalChange) {
+            this.triggerPostMortem(userId, id, data.status);
+        }
+        return result;
     }
     async delete(id, userId) {
         const existing = await prisma_1.default.offer.findFirst({

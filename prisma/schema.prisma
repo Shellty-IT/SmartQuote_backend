@@ -21,13 +21,15 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  clients     Client[]
-  offers      Offer[]
-  followUps   FollowUp[]
-  contracts   Contract[]
-  settings    UserSettings?
-  companyInfo CompanyInfo?
-  apiKeys     ApiKey[]
+  clients        Client[]
+  offers         Offer[]
+  followUps      FollowUp[]
+  contracts      Contract[]
+  settings       UserSettings?
+  companyInfo    CompanyInfo?
+  apiKeys        ApiKey[]
+  notifications  Notification[]
+  legacyInsights OfferLegacyInsight[]
 
   @@map("users")
 }
@@ -165,16 +167,17 @@ model Offer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  userId    String
-  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  clientId  String
-  client    Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  items     OfferItem[]
-  followUps FollowUp[]
-  contracts Contract[]
-  views     OfferView[]
+  userId       String
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId     String
+  client       Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  items        OfferItem[]
+  followUps    FollowUp[]
+  contracts    Contract[]
+  views        OfferView[]
   interactions OfferInteraction[]
-  comments  OfferComment[]
+  comments     OfferComment[]
+  legacyInsights OfferLegacyInsight[]
 
   @@unique([userId, number])
   @@index([userId])
@@ -250,6 +253,39 @@ model OfferComment {
 
   @@index([offerId])
   @@map("offer_comments")
+}
+
+model OfferLegacyInsight {
+  id        String   @id @default(cuid())
+  offerId   String
+  offer     Offer    @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  outcome   String
+  insights  Json
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([offerId])
+  @@map("offer_legacy_insights")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  link      String?
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
 }
 
 model Contract {
@@ -416,4 +452,14 @@ enum InteractionType {
 enum CommentAuthor {
   CLIENT
   SELLER
+}
+
+enum NotificationType {
+  OFFER_VIEWED
+  OFFER_ACCEPTED
+  OFFER_REJECTED
+  OFFER_COMMENT
+  AI_INSIGHT
+  FOLLOW_UP_REMINDER
+  SYSTEM
 }

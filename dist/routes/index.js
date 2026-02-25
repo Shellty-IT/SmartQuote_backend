@@ -13,6 +13,7 @@ const contracts_routes_1 = __importDefault(require("./contracts.routes"));
 const followups_routes_1 = __importDefault(require("./followups.routes"));
 const ai_routes_1 = __importDefault(require("./ai.routes"));
 const settings_routes_1 = __importDefault(require("./settings.routes"));
+const notifications_routes_1 = __importDefault(require("./notifications.routes"));
 const router = (0, express_1.Router)();
 router.use('/auth', auth_routes_1.default);
 router.use('/public/offers', publicOffer_routes_1.default);
@@ -22,6 +23,7 @@ router.use('/contracts', contracts_routes_1.default);
 router.use('/followups', followups_routes_1.default);
 router.use('/ai', ai_routes_1.default);
 router.use('/settings', settings_routes_1.default);
+router.use('/notifications', notifications_routes_1.default);
 router.get('/health', (req, res) => {
     res.json({ success: true, data: { status: 'healthy', timestamp: new Date().toISOString() } });
 });

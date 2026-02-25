@@ -7,7 +7,18 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.publicOfferService = exports.PublicOfferService = void 0;
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const library_1 = require("@prisma/client/runtime/library");
+const ai_service_1 = require("./ai.service");
+const notification_service_1 = require("./notification.service");
 class PublicOfferService {
+    triggerPostMortem(userId, offerId, outcome) {
+        ai_service_1.aiService.generatePostMortem(userId, offerId, outcome)
+            .then(() => {
+            console.log(`✅ Post-mortem generated for public offer ${offerId} [${outcome}]`);
+        })
+            .catch((err) => {
+            console.error(`❌ Post-mortem failed for public offer ${offerId}:`, err);
+        });
+    }
     async getOfferByToken(token) {
         const offer = await prisma_1.default.offer.findFirst({
             where: { publicToken: token, isInteractive: true },
@@ -116,18 +127,27 @@ class PublicOfferService {
     async registerView(token, ipAddress, userAgent) {
         const offer = await prisma_1.default.offer.findFirst({
             where: { publicToken: token, isInteractive: true },
-            select: { id: true, validUntil: true, status: true },
+            select: {
+                id: true,
+                validUntil: true,
+                status: true,
+                userId: true,
+                number: true,
+                title: true,
+                client: { select: { name: true } },
+            },
         });
         if (!offer)
             return null;
         if (offer.validUntil && new Date(offer.validUntil) < new Date()) {
             return null;
         }
+        const isFirstView = offer.status === 'SENT';
         const statusUpdate = {
             viewCount: { increment: 1 },
             lastViewedAt: new Date(),
         };
-        if (offer.status === 'SENT') {
+        if (isFirstView) {
             statusUpdate.status = 'VIEWED';
         }
         await prisma_1.default.$transaction([
@@ -150,6 +170,16 @@ class PublicOfferService {
                 data: statusUpdate,
             }),
         ]);
+        if (isFirstView) {
+            notification_service_1.notificationService.offerViewed(offer.userId, {
+                offerId: offer.id,
+                offerNumber: offer.number,
+                offerTitle: offer.title,
+                clientName: offer.client.name,
+            }).catch((err) => {
+                console.error('❌ Notification failed (offerViewed):', err);
+            });
+        }
         return true;
     }
     async acceptOffer(token, selectedItems) {
@@ -230,6 +260,18 @@ class PublicOfferService {
                 },
             }),
         ]);
+        this.triggerPostMortem(offer.user.id, offer.id, 'ACCEPTED');
+        const grossValue = totalGross.toDecimalPlaces(2).toNumber();
+        notification_service_1.notificationService.offerAccepted(offer.user.id, offer.user.email, {
+            offerId: offer.id,
+            offerNumber: offer.number,
+            offerTitle: offer.title,
+            clientName: offer.client.name,
+            totalGross: grossValue,
+            currency: offer.currency,
+        }).catch((err) => {
+            console.error('❌ Notification failed (offerAccepted):', err);
+        });
         return {
             success: true,
             data: {
@@ -241,7 +283,7 @@ class PublicOfferService {
                 clientEmail: offer.client.email,
                 totalNet: totalNet.toDecimalPlaces(2).toNumber(),
                 totalVat: totalVat.toDecimalPlaces(2).toNumber(),
-                totalGross: totalGross.toDecimalPlaces(2).toNumber(),
+                totalGross: grossValue,
                 selectedItems: clientSelectedData.filter((i) => i.isSelected),
                 sellerEmail: offer.user.email,
                 sellerName: offer.user.name,
@@ -283,6 +325,16 @@ class PublicOfferService {
                 },
             }),
         ]);
+        this.triggerPostMortem(offer.user.id, offer.id, 'REJECTED');
+        notification_service_1.notificationService.offerRejected(offer.user.id, offer.user.email, {
+            offerId: offer.id,
+            offerNumber: offer.number,
+            offerTitle: offer.title,
+            clientName: offer.client.name,
+            reason: reason || undefined,
+        }).catch((err) => {
+            console.error('❌ Notification failed (offerRejected):', err);
+        });
         return {
             success: true,
             data: {
@@ -305,6 +357,9 @@ class PublicOfferService {
                 status: true,
                 userId: true,
                 number: true,
+                title: true,
+                client: { select: { name: true } },
+                user: { select: { email: true } },
             },
         });
         if (!offer)
@@ -328,6 +383,15 @@ class PublicOfferService {
                 },
             }),
         ]);
+        notification_service_1.notificationService.offerComment(offer.userId, offer.user.email, {
+            offerId: offer.id,
+            offerNumber: offer.number,
+            offerTitle: offer.title,
+            clientName: offer.client.name,
+            commentPreview: content,
+        }).catch((err) => {
+            console.error('❌ Notification failed (offerComment):', err);
+        });
         return {
             comment,
             userId: offer.userId,

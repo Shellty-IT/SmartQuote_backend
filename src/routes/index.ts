@@ -9,6 +9,7 @@ import contractsRoutes from './contracts.routes';
 import followUpsRoutes from './followups.routes';
 import aiRoutes from './ai.routes';
 import settingsRoutes from './settings.routes';
+import notificationsRoutes from './notifications.routes';
 
 const router = Router();
 
@@ -21,6 +22,7 @@ router.use('/contracts', contractsRoutes);
 router.use('/followups', followUpsRoutes);
 router.use('/ai', aiRoutes);
 router.use('/settings', settingsRoutes);
+router.use('/notifications', notificationsRoutes);
 
 router.get('/health', (req, res) => {
     res.json({ success: true, data: { status: 'healthy', timestamp: new Date().toISOString() } });

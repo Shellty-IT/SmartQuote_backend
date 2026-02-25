@@ -3,6 +3,7 @@
 import prisma from '../lib/prisma';
 import { Decimal } from '@prisma/client/runtime/library';
 import { aiService } from './ai.service';
+import { notificationService } from './notification.service';
 
 export class PublicOfferService {
     private triggerPostMortem(userId: string, offerId: string, outcome: 'ACCEPTED' | 'REJECTED'): void {
@@ -10,7 +11,7 @@ export class PublicOfferService {
             .then(() => {
                 console.log(`✅ Post-mortem generated for public offer ${offerId} [${outcome}]`);
             })
-            .catch((err) => {
+            .catch((err: unknown) => {
                 console.error(`❌ Post-mortem failed for public offer ${offerId}:`, err);
             });
     }
@@ -126,7 +127,15 @@ export class PublicOfferService {
     async registerView(token: string, ipAddress?: string, userAgent?: string) {
         const offer = await prisma.offer.findFirst({
             where: { publicToken: token, isInteractive: true },
-            select: { id: true, validUntil: true, status: true },
+            select: {
+                id: true,
+                validUntil: true,
+                status: true,
+                userId: true,
+                number: true,
+                title: true,
+                client: { select: { name: true } },
+            },
         });
 
         if (!offer) return null;
@@ -135,12 +144,14 @@ export class PublicOfferService {
             return null;
         }
 
+        const isFirstView = offer.status === 'SENT';
+
         const statusUpdate: Record<string, unknown> = {
             viewCount: { increment: 1 },
             lastViewedAt: new Date(),
         };
 
-        if (offer.status === 'SENT') {
+        if (isFirstView) {
             statusUpdate.status = 'VIEWED';
         }
 
@@ -164,6 +175,17 @@ export class PublicOfferService {
                 data: statusUpdate,
             }),
         ]);
+
+        if (isFirstView) {
+            notificationService.offerViewed(offer.userId, {
+                offerId: offer.id,
+                offerNumber: offer.number,
+                offerTitle: offer.title,
+                clientName: offer.client.name,
+            }).catch((err: unknown) => {
+                console.error('❌ Notification failed (offerViewed):', err);
+            });
+        }
 
         return true;
     }
@@ -266,6 +288,19 @@ export class PublicOfferService {
 
         this.triggerPostMortem(offer.user.id, offer.id, 'ACCEPTED');
 
+        const grossValue = totalGross.toDecimalPlaces(2).toNumber();
+
+        notificationService.offerAccepted(offer.user.id, offer.user.email, {
+            offerId: offer.id,
+            offerNumber: offer.number,
+            offerTitle: offer.title,
+            clientName: offer.client.name,
+            totalGross: grossValue,
+            currency: offer.currency,
+        }).catch((err: unknown) => {
+            console.error('❌ Notification failed (offerAccepted):', err);
+        });
+
         return {
             success: true as const,
             data: {
@@ -277,7 +312,7 @@ export class PublicOfferService {
                 clientEmail: offer.client.email,
                 totalNet: totalNet.toDecimalPlaces(2).toNumber(),
                 totalVat: totalVat.toDecimalPlaces(2).toNumber(),
-                totalGross: totalGross.toDecimalPlaces(2).toNumber(),
+                totalGross: grossValue,
                 selectedItems: clientSelectedData.filter((i) => i.isSelected),
                 sellerEmail: offer.user.email,
                 sellerName: offer.user.name,
@@ -326,6 +361,16 @@ export class PublicOfferService {
 
         this.triggerPostMortem(offer.user.id, offer.id, 'REJECTED');
 
+        notificationService.offerRejected(offer.user.id, offer.user.email, {
+            offerId: offer.id,
+            offerNumber: offer.number,
+            offerTitle: offer.title,
+            clientName: offer.client.name,
+            reason: reason || undefined,
+        }).catch((err: unknown) => {
+            console.error('❌ Notification failed (offerRejected):', err);
+        });
+
         return {
             success: true as const,
             data: {
@@ -349,6 +394,9 @@ export class PublicOfferService {
                 status: true,
                 userId: true,
                 number: true,
+                title: true,
+                client: { select: { name: true } },
+                user: { select: { email: true } },
             },
         });
 
@@ -374,6 +422,16 @@ export class PublicOfferService {
                 },
             }),
         ]);
+
+        notificationService.offerComment(offer.userId, offer.user.email, {
+            offerId: offer.id,
+            offerNumber: offer.number,
+            offerTitle: offer.title,
+            clientName: offer.client.name,
+            commentPreview: content,
+        }).catch((err: unknown) => {
+            console.error('❌ Notification failed (offerComment):', err);
+        });
 
         return {
             comment,

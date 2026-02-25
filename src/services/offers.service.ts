@@ -6,6 +6,7 @@ import prisma from '../lib/prisma';
 import { CreateOfferInput, UpdateOfferInput, PaginationQuery, OfferItemInput } from '../types';
 import { generateOfferNumber } from '../utils/offerNumber';
 import { Decimal } from '@prisma/client/runtime/library';
+import { aiService } from './ai.service';
 
 interface ItemCalculation {
     quantity: number;
@@ -33,6 +34,16 @@ interface ItemWithTotals {
 }
 
 export class OffersService {
+    private triggerPostMortem(userId: string, offerId: string, outcome: 'ACCEPTED' | 'REJECTED'): void {
+        aiService.generatePostMortem(userId, offerId, outcome)
+            .then(() => {
+                console.log(`✅ Post-mortem generated for offer ${offerId} [${outcome}] (manual)`);
+            })
+            .catch((err: unknown) => {
+                console.error(`❌ Post-mortem failed for offer ${offerId}:`, err);
+            });
+    }
+
     private calculateItemTotals(item: ItemCalculation): {
         totalNet: Decimal;
         totalVat: Decimal;
@@ -217,6 +228,8 @@ export class OffersService {
             return null;
         }
 
+        const previousStatus = existing.status;
+
         let updateData: Prisma.OfferUpdateInput = {
             title: data.title,
             description: data.description,
@@ -245,6 +258,8 @@ export class OffersService {
             }
         }
 
+        let result;
+
         if (data.items && data.items.length > 0) {
             const itemsWithTotals = data.items.map((item: OfferItemInput, index: number) =>
                 this.buildItemWithTotals(item, index)
@@ -263,7 +278,7 @@ export class OffersService {
                 new Decimal(0)
             );
 
-            return prisma.$transaction(async (tx) => {
+            result = await prisma.$transaction(async (tx) => {
                 await tx.offerItem.deleteMany({ where: { offerId: id } });
 
                 return tx.offer.update({
@@ -283,16 +298,26 @@ export class OffersService {
                     },
                 });
             });
+        } else {
+            result = await prisma.offer.update({
+                where: { id },
+                data: updateData,
+                include: {
+                    client: true,
+                    items: { orderBy: { position: 'asc' } },
+                },
+            });
         }
 
-        return prisma.offer.update({
-            where: { id },
-            data: updateData,
-            include: {
-                client: true,
-                items: { orderBy: { position: 'asc' } },
-            },
-        });
+        const isTerminalChange = data.status &&
+            (data.status === 'ACCEPTED' || data.status === 'REJECTED') &&
+            previousStatus !== data.status;
+
+        if (isTerminalChange) {
+            this.triggerPostMortem(userId, id, data.status as 'ACCEPTED' | 'REJECTED');
+        }
+
+        return result;
     }
 
     async delete(id: string, userId: string) {
