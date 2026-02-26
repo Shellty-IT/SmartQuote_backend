@@ -10,6 +10,8 @@ const prisma_1 = __importDefault(require("../lib/prisma"));
 const offerNumber_1 = require("../utils/offerNumber");
 const library_1 = require("@prisma/client/runtime/library");
 const ai_service_1 = require("./ai.service");
+const email_service_1 = require("./email.service");
+const settings_service_1 = require("./settings.service");
 class OffersService {
     triggerPostMortem(userId, offerId, outcome) {
         ai_service_1.aiService.generatePostMortem(userId, offerId, outcome)
@@ -374,6 +376,59 @@ class OffersService {
             },
         });
         return true;
+    }
+    async sendOfferToClient(offerId, userId) {
+        const offer = await prisma_1.default.offer.findFirst({
+            where: { id: offerId, userId },
+            include: {
+                client: true,
+                user: {
+                    select: {
+                        name: true,
+                        email: true,
+                        companyInfo: {
+                            select: { name: true },
+                        },
+                    },
+                },
+            },
+        });
+        if (!offer) {
+            throw new Error('OFFER_NOT_FOUND');
+        }
+        if (!offer.client.email) {
+            throw new Error('CLIENT_NO_EMAIL');
+        }
+        const smtpConfig = await (0, settings_service_1.getDecryptedSmtpConfig)(userId);
+        if (!smtpConfig) {
+            throw new Error('SMTP_NOT_CONFIGURED');
+        }
+        let publicUrl;
+        if (offer.publicToken && offer.isInteractive) {
+            publicUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/offer/view/${offer.publicToken}`;
+        }
+        else {
+            const publishResult = await this.publishOffer(offerId, userId);
+            if (!publishResult) {
+                throw new Error('PUBLISH_FAILED');
+            }
+            publicUrl = publishResult.publicUrl;
+        }
+        const sent = await email_service_1.emailService.sendOfferLink(offer.client.email, {
+            offerNumber: offer.number,
+            offerTitle: offer.title,
+            clientName: offer.client.name,
+            totalGross: Number(offer.totalGross),
+            currency: offer.currency,
+            validUntil: offer.validUntil ? offer.validUntil.toISOString() : null,
+            publicUrl,
+            sellerName: offer.user.name || offer.user.email,
+            companyName: offer.user.companyInfo?.name || null,
+        }, smtpConfig);
+        if (!sent) {
+            throw new Error('EMAIL_SEND_FAILED');
+        }
+        return { sent: true, email: offer.client.email };
     }
     async getOfferAnalytics(offerId, userId) {
         const offer = await prisma_1.default.offer.findFirst({

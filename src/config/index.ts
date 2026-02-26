@@ -8,7 +8,6 @@ export const config = {
     nodeEnv: process.env.NODE_ENV || 'development',
     saltRounds: 12,
     jwtSecret: process.env.JWT_SECRET || 'your-secret-key-min-32-characters-long',
-    // Usuń jwtExpiresIn - będziemy używać bezpośrednio w kontrolerze
 
 
 gemini: {

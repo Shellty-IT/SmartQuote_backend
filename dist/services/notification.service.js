@@ -7,6 +7,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.notificationService = void 0;
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const email_service_1 = require("./email.service");
+const settings_service_1 = require("./settings.service");
 class NotificationService {
     async createRecord(data) {
         return prisma_1.default.notification.create({
@@ -20,14 +21,28 @@ class NotificationService {
             },
         });
     }
-    async shouldSendEmail(userId) {
+    async getSmtpIfEnabled(userId) {
         const settings = await prisma_1.default.userSettings.findUnique({
             where: { userId },
-            select: { emailNotifications: true, offerNotifications: true },
+            select: {
+                emailNotifications: true,
+                offerNotifications: true,
+                smtpConfigured: true,
+            },
         });
         if (!settings)
-            return true;
-        return settings.emailNotifications && settings.offerNotifications;
+            return null;
+        if (!settings.emailNotifications || !settings.offerNotifications)
+            return null;
+        if (!settings.smtpConfigured)
+            return null;
+        try {
+            return await (0, settings_service_1.getDecryptedSmtpConfig)(userId);
+        }
+        catch (err) {
+            console.error('❌ Failed to get SMTP config for user:', userId, err);
+            return null;
+        }
     }
     async offerViewed(userId, data) {
         try {
@@ -62,9 +77,9 @@ class NotificationService {
                     currency: data.currency,
                 },
             });
-            const canSend = await this.shouldSendEmail(userId);
-            if (canSend) {
-                email_service_1.emailService.sendOfferAccepted(userEmail, data).catch((err) => {
+            const smtp = await this.getSmtpIfEnabled(userId);
+            if (smtp) {
+                email_service_1.emailService.sendOfferAccepted(userEmail, data, smtp).catch((err) => {
                     console.error('❌ Email failed (offerAccepted):', err);
                 });
             }
@@ -87,9 +102,9 @@ class NotificationService {
                     reason: data.reason || null,
                 },
             });
-            const canSend = await this.shouldSendEmail(userId);
-            if (canSend) {
-                email_service_1.emailService.sendOfferRejected(userEmail, data).catch((err) => {
+            const smtp = await this.getSmtpIfEnabled(userId);
+            if (smtp) {
+                email_service_1.emailService.sendOfferRejected(userEmail, data, smtp).catch((err) => {
                     console.error('❌ Email failed (offerRejected):', err);
                 });
             }
@@ -114,12 +129,12 @@ class NotificationService {
                     offerNumber: data.offerNumber,
                 },
             });
-            const canSend = await this.shouldSendEmail(userId);
-            if (canSend) {
+            const smtp = await this.getSmtpIfEnabled(userId);
+            if (smtp) {
                 email_service_1.emailService.sendNewComment(userEmail, {
                     ...data,
                     commentPreview: preview,
-                }).catch((err) => {
+                }, smtp).catch((err) => {
                     console.error('❌ Email failed (offerComment):', err);
                 });
             }

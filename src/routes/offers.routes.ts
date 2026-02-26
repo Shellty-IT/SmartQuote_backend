@@ -26,6 +26,7 @@ router.get('/:id', validate(getOfferSchema), offersController.findById);
 router.post('/', validate(createOfferSchema), offersController.create);
 router.post('/:id/duplicate', validate(getOfferSchema), offersController.duplicate);
 router.post('/:id/publish', offersController.publish);
+router.post('/:id/send-to-client', offersController.sendToClient);
 router.post('/:id/comments', offersController.addComment);
 
 router.put('/:id', validate(updateOfferSchema), offersController.update);

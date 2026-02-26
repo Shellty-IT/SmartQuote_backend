@@ -306,3 +306,11 @@ export interface EmailGenerationContext {
 }
 
 export type EmailType = 'offer_send' | 'followup' | 'thank_you' | 'reminder';
+
+export interface SmtpConfig {
+    host: string;
+    port: number;
+    user: string;
+    pass: string;
+    from: string;
+}

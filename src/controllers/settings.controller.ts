@@ -2,11 +2,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import * as settingsService from '../services/settings.service';
-import { successResponse } from '../utils/apiResponse';
-
-// ============================================
-// GET ALL SETTINGS
-// ============================================
+import { successResponse, errorResponse } from '../utils/apiResponse';
 
 export async function getAllSettings(req: Request, res: Response, next: NextFunction) {
     try {
@@ -17,10 +13,6 @@ export async function getAllSettings(req: Request, res: Response, next: NextFunc
         next(error);
     }
 }
-
-// ============================================
-// PROFILE
-// ============================================
 
 export async function getProfile(req: Request, res: Response, next: NextFunction) {
     try {
@@ -42,10 +34,6 @@ export async function updateProfile(req: Request, res: Response, next: NextFunct
     }
 }
 
-// ============================================
-// PASSWORD
-// ============================================
-
 export async function changePassword(req: Request, res: Response, next: NextFunction) {
     try {
         const userId = req.user!.id;
@@ -56,10 +44,6 @@ export async function changePassword(req: Request, res: Response, next: NextFunc
         next(error);
     }
 }
-
-// ============================================
-// SETTINGS
-// ============================================
 
 export async function getSettings(req: Request, res: Response, next: NextFunction) {
     try {
@@ -81,10 +65,6 @@ export async function updateSettings(req: Request, res: Response, next: NextFunc
     }
 }
 
-// ============================================
-// COMPANY INFO
-// ============================================
-
 export async function getCompanyInfo(req: Request, res: Response, next: NextFunction) {
     try {
         const userId = req.user!.id;
@@ -104,10 +84,6 @@ export async function updateCompanyInfo(req: Request, res: Response, next: NextF
         next(error);
     }
 }
-
-// ============================================
-// API KEYS
-// ============================================
 
 export async function getApiKeys(req: Request, res: Response, next: NextFunction) {
     try {
@@ -144,6 +120,49 @@ export async function toggleApiKey(req: Request, res: Response, next: NextFuncti
         const userId = req.user!.id;
         const apiKey = await settingsService.toggleApiKey(userId, req.params.id);
         successResponse(res, apiKey);
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function getSmtpConfig(req: Request, res: Response, next: NextFunction) {
+    try {
+        const userId = req.user!.id;
+        const config = await settingsService.getSmtpConfig(userId);
+        successResponse(res, config);
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function updateSmtpConfig(req: Request, res: Response, next: NextFunction) {
+    try {
+        const userId = req.user!.id;
+        const config = await settingsService.updateSmtpConfig(userId, req.body);
+        successResponse(res, config);
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function deleteSmtpConfig(req: Request, res: Response, next: NextFunction) {
+    try {
+        const userId = req.user!.id;
+        const result = await settingsService.deleteSmtpConfig(userId);
+        successResponse(res, result);
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function testSmtpConnection(req: Request, res: Response, next: NextFunction) {
+    try {
+        const result = await settingsService.testSmtpConnection(req.body);
+        if (result.success) {
+            successResponse(res, { connected: true, message: 'Połączenie SMTP udane' });
+        } else {
+            errorResponse(res, 'SMTP_TEST_FAILED', result.error || 'Nie udało się połączyć', 400);
+        }
     } catch (error) {
         next(error);
     }

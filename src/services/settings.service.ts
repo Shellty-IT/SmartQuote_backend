@@ -1,11 +1,11 @@
 // smartquote_backend/src/services/settings.service.ts
 
+import crypto from 'crypto';
 import prisma from '../lib/prisma';
 import bcrypt from 'bcryptjs';
-
-// ============================================
-// PROFILE
-// ============================================
+import { encrypt, decrypt } from '../utils/crypto';
+import { emailService } from './email.service';
+import type { SmtpConfig } from '../types';
 
 export async function getProfile(userId: string) {
     const user = await prisma.user.findUnique({
@@ -53,10 +53,6 @@ export async function updateProfile(
     return user;
 }
 
-// ============================================
-// PASSWORD
-// ============================================
-
 export async function changePassword(
     userId: string,
     currentPassword: string,
@@ -85,23 +81,21 @@ export async function changePassword(
     return { message: 'Hasło zostało zmienione' };
 }
 
-// ============================================
-// USER SETTINGS
-// ============================================
-
 export async function getSettings(userId: string) {
     let settings = await prisma.userSettings.findUnique({
         where: { userId },
     });
 
-    // Jeśli nie ma ustawień, utwórz domyślne
     if (!settings) {
         settings = await prisma.userSettings.create({
             data: { userId },
         });
     }
 
-    return settings;
+    return {
+        ...settings,
+        smtpPass: settings.smtpPass ? '••••••••' : null,
+    };
 }
 
 export async function updateSettings(
@@ -126,19 +120,159 @@ export async function updateSettings(
         },
     });
 
-    return settings;
+    return {
+        ...settings,
+        smtpPass: settings.smtpPass ? '••••••••' : null,
+    };
 }
 
-// ============================================
-// COMPANY INFO
-// ============================================
+export async function getSmtpConfig(userId: string) {
+    const settings = await prisma.userSettings.findUnique({
+        where: { userId },
+        select: {
+            smtpHost: true,
+            smtpPort: true,
+            smtpUser: true,
+            smtpPass: true,
+            smtpFrom: true,
+            smtpConfigured: true,
+        },
+    });
+
+    if (!settings) {
+        return {
+            smtpHost: null,
+            smtpPort: 587,
+            smtpUser: null,
+            smtpPass: null,
+            smtpFrom: null,
+            smtpConfigured: false,
+        };
+    }
+
+    return {
+        smtpHost: settings.smtpHost,
+        smtpPort: settings.smtpPort,
+        smtpUser: settings.smtpUser,
+        smtpPass: settings.smtpPass ? '••••••••' : null,
+        smtpFrom: settings.smtpFrom,
+        smtpConfigured: settings.smtpConfigured,
+    };
+}
+
+export async function updateSmtpConfig(
+    userId: string,
+    data: {
+        smtpHost: string;
+        smtpPort: number;
+        smtpUser: string;
+        smtpPass?: string;
+        smtpFrom?: string;
+    }
+) {
+    const existing = await prisma.userSettings.findUnique({
+        where: { userId },
+        select: { smtpPass: true },
+    });
+
+    let encryptedPass = existing?.smtpPass || null;
+
+    if (data.smtpPass && data.smtpPass !== '••••••••') {
+        encryptedPass = encrypt(data.smtpPass);
+    }
+
+    const isConfigured = !!(data.smtpHost && data.smtpUser && encryptedPass);
+
+    const settings = await prisma.userSettings.upsert({
+        where: { userId },
+        update: {
+            smtpHost: data.smtpHost,
+            smtpPort: data.smtpPort,
+            smtpUser: data.smtpUser,
+            smtpPass: encryptedPass,
+            smtpFrom: data.smtpFrom || data.smtpUser,
+            smtpConfigured: isConfigured,
+        },
+        create: {
+            userId,
+            smtpHost: data.smtpHost,
+            smtpPort: data.smtpPort,
+            smtpUser: data.smtpUser,
+            smtpPass: encryptedPass,
+            smtpFrom: data.smtpFrom || data.smtpUser,
+            smtpConfigured: isConfigured,
+        },
+    });
+
+    return {
+        smtpHost: settings.smtpHost,
+        smtpPort: settings.smtpPort,
+        smtpUser: settings.smtpUser,
+        smtpPass: settings.smtpPass ? '••••••••' : null,
+        smtpFrom: settings.smtpFrom,
+        smtpConfigured: settings.smtpConfigured,
+    };
+}
+
+export async function deleteSmtpConfig(userId: string) {
+    await prisma.userSettings.upsert({
+        where: { userId },
+        update: {
+            smtpHost: null,
+            smtpPort: 587,
+            smtpUser: null,
+            smtpPass: null,
+            smtpFrom: null,
+            smtpConfigured: false,
+        },
+        create: {
+            userId,
+        },
+    });
+
+    return { message: 'Konfiguracja SMTP została usunięta' };
+}
+
+export async function testSmtpConnection(config: SmtpConfig) {
+    return emailService.testConnection(config);
+}
+
+export async function getDecryptedSmtpConfig(userId: string): Promise<SmtpConfig | null> {
+    const settings = await prisma.userSettings.findUnique({
+        where: { userId },
+        select: {
+            smtpHost: true,
+            smtpPort: true,
+            smtpUser: true,
+            smtpPass: true,
+            smtpFrom: true,
+            smtpConfigured: true,
+        },
+    });
+
+    if (!settings || !settings.smtpConfigured) return null;
+    if (!settings.smtpHost || !settings.smtpUser || !settings.smtpPass) return null;
+
+    try {
+        const decryptedPass = decrypt(settings.smtpPass);
+        return {
+            host: settings.smtpHost,
+            port: settings.smtpPort || 587,
+            user: settings.smtpUser,
+            pass: decryptedPass,
+            from: settings.smtpFrom || settings.smtpUser,
+        };
+    } catch (err: unknown) {
+        console.error('❌ SMTP password decryption failed for user:', userId, err);
+        return null;
+    }
+}
 
 export async function getCompanyInfo(userId: string) {
     let companyInfo = await prisma.companyInfo.findUnique({
         where: { userId },
     });
 
-    // Jeśli nie ma danych firmy, zwróć puste
     if (!companyInfo) {
         companyInfo = await prisma.companyInfo.create({
             data: { userId },
@@ -181,12 +315,6 @@ export async function updateCompanyInfo(
     return companyInfo;
 }
 
-// ============================================
-// API KEYS
-// ============================================
-
-import crypto from 'crypto';
-
 export async function getApiKeys(userId: string) {
     const apiKeys = await prisma.apiKey.findMany({
         where: { userId },
@@ -203,7 +331,6 @@ export async function getApiKeys(userId: string) {
         orderBy: { createdAt: 'desc' },
     });
 
-    // Maskuj klucze (pokaż tylko pierwsze i ostatnie 4 znaki)
     return apiKeys.map((key) => ({
         ...key,
         key: `${key.key.slice(0, 8)}...${key.key.slice(-4)}`,
@@ -230,10 +357,9 @@ export async function createApiKey(
         },
     });
 
-    // Zwróć pełny klucz tylko przy tworzeniu
     return {
         ...apiKey,
-        key, // Pełny klucz - pokaż tylko raz!
+        key,
     };
 }
 
@@ -269,10 +395,6 @@ export async function toggleApiKey(userId: string, keyId: string) {
 
     return updated;
 }
-
-// ============================================
-// GET ALL SETTINGS (combined)
-// ============================================
 
 export async function getAllSettings(userId: string) {
     const [profile, settings, companyInfo, apiKeys] = await Promise.all([

@@ -8,28 +8,26 @@ exports.emailService = void 0;
 const nodemailer_1 = __importDefault(require("nodemailer"));
 class EmailService {
     constructor() {
-        this.transporter = null;
-        this.isConfigured = false;
         this.frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
-        this.initialize();
     }
-    initialize() {
-        const host = process.env.SMTP_HOST;
-        const port = parseInt(process.env.SMTP_PORT || '587', 10);
-        const user = process.env.SMTP_USER;
-        const pass = process.env.SMTP_PASS;
-        if (!host || !user || !pass) {
-            console.warn('⚠️  SMTP not configured — email sending disabled');
-            return;
-        }
-        this.transporter = nodemailer_1.default.createTransport({
-            host,
-            port,
-            secure: port === 465,
-            auth: { user, pass },
+    createTransporter(config) {
+        return nodemailer_1.default.createTransport({
+            host: config.host,
+            port: config.port,
+            secure: config.port === 465,
+            auth: { user: config.user, pass: config.pass },
         });
-        this.isConfigured = true;
-        console.log('✅ Email service initialized');
+    }
+    async testConnection(config) {
+        try {
+            const transporter = this.createTransporter(config);
+            await transporter.verify();
+            return { success: true };
+        }
+        catch (err) {
+            const message = err instanceof Error ? err.message : 'Nieznany błąd połączenia';
+            return { success: false, error: message };
+        }
     }
     formatCurrency(amount, currency = 'PLN') {
         return new Intl.NumberFormat('pl-PL', {
@@ -64,14 +62,11 @@ class EmailService {
 <a href="${url}" style="color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;display:inline-block;" target="_blank">${label}</a>
 </td></tr></table>`;
     }
-    async send(options) {
-        if (!this.isConfigured || !this.transporter) {
-            console.log(`📧 Email skipped (SMTP not configured): ${options.subject}`);
-            return false;
-        }
+    async send(options, smtpConfig) {
         try {
-            await this.transporter.sendMail({
-                from: process.env.SMTP_FROM || process.env.SMTP_USER,
+            const transporter = this.createTransporter(smtpConfig);
+            await transporter.sendMail({
+                from: smtpConfig.from || smtpConfig.user,
                 ...options,
             });
             console.log(`📧 Email sent: ${options.subject} → ${options.to}`);
@@ -82,7 +77,7 @@ class EmailService {
             return false;
         }
     }
-    async sendOfferAccepted(to, data) {
+    async sendOfferAccepted(to, data, smtpConfig) {
         const url = `${this.frontendUrl}/dashboard/offers/${data.offerId}`;
         const html = this.baseTemplate(`
 <div style="text-align:center;margin-bottom:24px;">
@@ -106,9 +101,9 @@ ${this.ctaButton(url, 'Zobacz ofertę →')}`);
             to,
             subject: `✅ Oferta ${data.offerNumber} zaakceptowana przez ${data.clientName}`,
             html,
-        });
+        }, smtpConfig);
     }
-    async sendOfferRejected(to, data) {
+    async sendOfferRejected(to, data, smtpConfig) {
         const url = `${this.frontendUrl}/dashboard/offers/${data.offerId}`;
         const reasonBlock = data.reason
             ? `<table width="100%" cellpadding="0" cellspacing="0" style="background:#fef2f2;border-radius:12px;border:1px solid #fecaca;margin-top:16px;">
@@ -136,9 +131,9 @@ ${this.ctaButton(url, 'Zobacz szczegóły →')}`);
             to,
             subject: `❌ Oferta ${data.offerNumber} odrzucona przez ${data.clientName}`,
             html,
-        });
+        }, smtpConfig);
     }
-    async sendNewComment(to, data) {
+    async sendNewComment(to, data, smtpConfig) {
         const url = `${this.frontendUrl}/dashboard/offers/${data.offerId}`;
         const html = this.baseTemplate(`
 <div style="text-align:center;margin-bottom:24px;">
@@ -156,7 +151,47 @@ ${this.ctaButton(url, 'Odpowiedz →')}`);
             to,
             subject: `💬 Nowy komentarz od ${data.clientName} — oferta ${data.offerNumber}`,
             html,
-        });
+        }, smtpConfig);
+    }
+    async sendOfferLink(to, data, smtpConfig) {
+        const senderLabel = data.companyName || data.sellerName;
+        const validUntilBlock = data.validUntil
+            ? `<tr><td style="padding:0 16px 16px;">
+<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Ważna do</p>
+<p style="margin:0;color:#0f172a;font-size:14px;">${new Date(data.validUntil).toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+</td></tr>`
+            : '';
+        const html = this.baseTemplate(`
+<h2 style="margin:0 0 16px;color:#0f172a;font-size:20px;font-weight:700;">Dzień dobry${data.clientName ? `, ${data.clientName}` : ''}!</h2>
+<p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px;">
+${senderLabel} przygotował dla Ciebie ofertę handlową. Kliknij poniższy przycisk, aby zapoznać się ze szczegółami.
+</p>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">
+<tr><td style="padding:16px;">
+<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Oferta</p>
+<p style="margin:0;color:#0f172a;font-size:15px;font-weight:600;">${data.offerTitle}</p>
+<p style="margin:4px 0 0;color:#64748b;font-size:13px;">${data.offerNumber}</p>
+</td></tr>
+<tr><td style="padding:0 16px 16px;">
+<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Wartość brutto</p>
+<p style="margin:0;color:#0891b2;font-size:20px;font-weight:700;">${this.formatCurrency(data.totalGross, data.currency)}</p>
+</td></tr>
+${validUntilBlock}
+</table>
+${this.ctaButton(data.publicUrl, 'Zobacz ofertę →')}
+<p style="color:#64748b;font-size:13px;line-height:1.6;margin:16px 0 0;">
+Na stronie oferty możesz przeglądać pozycje, wybierać opcje, zadawać pytania i zaakceptować lub odrzucić ofertę.
+</p>
+<p style="color:#94a3b8;font-size:12px;margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0;">
+Pozdrawiam,<br/>
+<strong style="color:#475569;">${data.sellerName}</strong>
+${data.companyName ? `<br/><span style="color:#64748b;">${data.companyName}</span>` : ''}
+</p>`);
+        return this.send({
+            to,
+            subject: `Oferta ${data.offerNumber} — ${data.offerTitle} | ${senderLabel}`,
+            html,
+        }, smtpConfig);
     }
 }
 exports.emailService = new EmailService();

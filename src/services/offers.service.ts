@@ -7,6 +7,8 @@ import { CreateOfferInput, UpdateOfferInput, PaginationQuery, OfferItemInput } f
 import { generateOfferNumber } from '../utils/offerNumber';
 import { Decimal } from '@prisma/client/runtime/library';
 import { aiService } from './ai.service';
+import { emailService } from './email.service';
+import { getDecryptedSmtpConfig } from './settings.service';
 
 interface ItemCalculation {
     quantity: number;
@@ -477,6 +479,71 @@ export class OffersService {
         });
 
         return true;
+    }
+
+    async sendOfferToClient(offerId: string, userId: string): Promise<{ sent: boolean; email: string }> {
+        const offer = await prisma.offer.findFirst({
+            where: { id: offerId, userId },
+            include: {
+                client: true,
+                user: {
+                    select: {
+                        name: true,
+                        email: true,
+                        companyInfo: {
+                            select: { name: true },
+                        },
+                    },
+                },
+            },
+        });
+
+        if (!offer) {
+            throw new Error('OFFER_NOT_FOUND');
+        }
+
+        if (!offer.client.email) {
+            throw new Error('CLIENT_NO_EMAIL');
+        }
+
+        const smtpConfig = await getDecryptedSmtpConfig(userId);
+        if (!smtpConfig) {
+            throw new Error('SMTP_NOT_CONFIGURED');
+        }
+
+        let publicUrl: string;
+
+        if (offer.publicToken && offer.isInteractive) {
+            publicUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/offer/view/${offer.publicToken}`;
+        } else {
+            const publishResult = await this.publishOffer(offerId, userId);
+            if (!publishResult) {
+                throw new Error('PUBLISH_FAILED');
+            }
+            publicUrl = publishResult.publicUrl;
+        }
+
+        const sent = await emailService.sendOfferLink(
+            offer.client.email,
+            {
+                offerNumber: offer.number,
+                offerTitle: offer.title,
+                clientName: offer.client.name,
+                totalGross: Number(offer.totalGross),
+                currency: offer.currency,
+                validUntil: offer.validUntil ? offer.validUntil.toISOString() : null,
+                publicUrl,
+                sellerName: offer.user.name || offer.user.email,
+                companyName: offer.user.companyInfo?.name || null,
+            },
+            smtpConfig
+        );
+
+        if (!sent) {
+            throw new Error('EMAIL_SEND_FAILED');
+        }
+
+        return { sent: true, email: offer.client.email };
     }
 
     async getOfferAnalytics(offerId: string, userId: string) {

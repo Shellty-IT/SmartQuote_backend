@@ -40,24 +40,21 @@ const validate_1 = require("../middleware/validate");
 const settingsController = __importStar(require("../controllers/settings.controller"));
 const v = __importStar(require("../validators/settings.validator"));
 const router = (0, express_1.Router)();
-// Wszystkie routes wymagają autoryzacji
 router.use(auth_1.authenticate);
-// Get all settings at once
 router.get('/', settingsController.getAllSettings);
-// Profile
 router.get('/profile', settingsController.getProfile);
 router.put('/profile', (0, validate_1.validate)(v.updateProfileSchema), settingsController.updateProfile);
-// Password
 router.put('/password', (0, validate_1.validate)(v.changePasswordSchema), settingsController.changePassword);
-// Settings (preferences)
 router.get('/preferences', settingsController.getSettings);
 router.put('/preferences', (0, validate_1.validate)(v.updateSettingsSchema), settingsController.updateSettings);
-// Company Info
 router.get('/company', settingsController.getCompanyInfo);
 router.put('/company', (0, validate_1.validate)(v.updateCompanyInfoSchema), settingsController.updateCompanyInfo);
-// API Keys
 router.get('/api-keys', settingsController.getApiKeys);
 router.post('/api-keys', (0, validate_1.validate)(v.createApiKeySchema), settingsController.createApiKey);
 router.patch('/api-keys/:id/toggle', settingsController.toggleApiKey);
 router.delete('/api-keys/:id', settingsController.deleteApiKey);
+router.get('/smtp', settingsController.getSmtpConfig);
+router.put('/smtp', (0, validate_1.validate)(v.updateSmtpConfigSchema), settingsController.updateSmtpConfig);
+router.delete('/smtp', settingsController.deleteSmtpConfig);
+router.post('/smtp/test', (0, validate_1.validate)(v.testSmtpConnectionSchema), settingsController.testSmtpConnection);
 exports.default = router;

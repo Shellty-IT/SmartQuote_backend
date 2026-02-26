@@ -63,3 +63,23 @@ export const createApiKeySchema = z.object({
         expiresAt: z.string().datetime().optional().nullable(),
     }),
 });
+
+export const updateSmtpConfigSchema = z.object({
+    body: z.object({
+        smtpHost: z.string().min(1, 'Host SMTP jest wymagany').max(200),
+        smtpPort: z.number().int().min(1).max(65535).default(587),
+        smtpUser: z.string().min(1, 'Użytkownik SMTP jest wymagany').max(200),
+        smtpPass: z.string().max(500).optional(),
+        smtpFrom: z.string().max(200).optional(),
+    }),
+});
+
+export const testSmtpConnectionSchema = z.object({
+    body: z.object({
+        host: z.string().min(1, 'Host jest wymagany'),
+        port: z.number().int().min(1).max(65535),
+        user: z.string().min(1, 'Użytkownik jest wymagany'),
+        pass: z.string().min(1, 'Hasło jest wymagane'),
+        from: z.string().optional(),
+    }),
+});

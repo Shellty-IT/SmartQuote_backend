@@ -3,6 +3,8 @@
 import { NotificationType } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { emailService } from './email.service';
+import { getDecryptedSmtpConfig } from './settings.service';
+import type { SmtpConfig } from '../types';
 
 interface OfferNotificationData {
     offerId: string;
@@ -45,14 +47,26 @@ class NotificationService {
         });
     }
 
-    private async shouldSendEmail(userId: string): Promise<boolean> {
+    private async getSmtpIfEnabled(userId: string): Promise<SmtpConfig | null> {
         const settings = await prisma.userSettings.findUnique({
             where: { userId },
-            select: { emailNotifications: true, offerNotifications: true },
+            select: {
+                emailNotifications: true,
+                offerNotifications: true,
+                smtpConfigured: true,
+            },
         });
 
-        if (!settings) return true;
-        return settings.emailNotifications && settings.offerNotifications;
+        if (!settings) return null;
+        if (!settings.emailNotifications || !settings.offerNotifications) return null;
+        if (!settings.smtpConfigured) return null;
+
+        try {
+            return await getDecryptedSmtpConfig(userId);
+        } catch (err: unknown) {
+            console.error('❌ Failed to get SMTP config for user:', userId, err);
+            return null;
+        }
     }
 
     async offerViewed(userId: string, data: OfferNotificationData): Promise<void> {
@@ -68,7 +82,7 @@ class NotificationService {
                     offerNumber: data.offerNumber,
                 },
             });
-        } catch (error) {
+        } catch (error: unknown) {
             console.error('❌ Notification error (offerViewed):', error);
         }
     }
@@ -89,13 +103,13 @@ class NotificationService {
                 },
             });
 
-            const canSend = await this.shouldSendEmail(userId);
-            if (canSend) {
-                emailService.sendOfferAccepted(userEmail, data).catch((err) => {
+            const smtp = await this.getSmtpIfEnabled(userId);
+            if (smtp) {
+                emailService.sendOfferAccepted(userEmail, data, smtp).catch((err: unknown) => {
                     console.error('❌ Email failed (offerAccepted):', err);
                 });
             }
-        } catch (error) {
+        } catch (error: unknown) {
             console.error('❌ Notification error (offerAccepted):', error);
         }
     }
@@ -115,13 +129,13 @@ class NotificationService {
                 },
             });
 
-            const canSend = await this.shouldSendEmail(userId);
-            if (canSend) {
-                emailService.sendOfferRejected(userEmail, data).catch((err) => {
+            const smtp = await this.getSmtpIfEnabled(userId);
+            if (smtp) {
+                emailService.sendOfferRejected(userEmail, data, smtp).catch((err: unknown) => {
                     console.error('❌ Email failed (offerRejected):', err);
                 });
             }
-        } catch (error) {
+        } catch (error: unknown) {
             console.error('❌ Notification error (offerRejected):', error);
         }
     }
@@ -144,16 +158,16 @@ class NotificationService {
                 },
             });
 
-            const canSend = await this.shouldSendEmail(userId);
-            if (canSend) {
+            const smtp = await this.getSmtpIfEnabled(userId);
+            if (smtp) {
                 emailService.sendNewComment(userEmail, {
                     ...data,
                     commentPreview: preview,
-                }).catch((err) => {
+                }, smtp).catch((err: unknown) => {
                     console.error('❌ Email failed (offerComment):', err);
                 });
             }
-        } catch (error) {
+        } catch (error: unknown) {
             console.error('❌ Notification error (offerComment):', error);
         }
     }
@@ -172,7 +186,7 @@ class NotificationService {
                     outcome: data.outcome,
                 },
             });
-        } catch (error) {
+        } catch (error: unknown) {
             console.error('❌ Notification error (aiInsight):', error);
         }
     }

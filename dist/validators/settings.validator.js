@@ -1,7 +1,7 @@
 "use strict";
 // smartquote_backend/src/validators/settings.validator.ts
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createApiKeySchema = exports.updateCompanyInfoSchema = exports.updateSettingsSchema = exports.changePasswordSchema = exports.updateProfileSchema = void 0;
+exports.testSmtpConnectionSchema = exports.updateSmtpConfigSchema = exports.createApiKeySchema = exports.updateCompanyInfoSchema = exports.updateSettingsSchema = exports.changePasswordSchema = exports.updateProfileSchema = void 0;
 const zod_1 = require("zod");
 exports.updateProfileSchema = zod_1.z.object({
     body: zod_1.z.object({
@@ -58,5 +58,23 @@ exports.createApiKeySchema = zod_1.z.object({
         name: zod_1.z.string().min(1, 'Nazwa jest wymagana').max(100),
         permissions: zod_1.z.array(zod_1.z.enum(['read', 'write', 'delete'])).optional(),
         expiresAt: zod_1.z.string().datetime().optional().nullable(),
+    }),
+});
+exports.updateSmtpConfigSchema = zod_1.z.object({
+    body: zod_1.z.object({
+        smtpHost: zod_1.z.string().min(1, 'Host SMTP jest wymagany').max(200),
+        smtpPort: zod_1.z.number().int().min(1).max(65535).default(587),
+        smtpUser: zod_1.z.string().min(1, 'Użytkownik SMTP jest wymagany').max(200),
+        smtpPass: zod_1.z.string().max(500).optional(),
+        smtpFrom: zod_1.z.string().max(200).optional(),
+    }),
+});
+exports.testSmtpConnectionSchema = zod_1.z.object({
+    body: zod_1.z.object({
+        host: zod_1.z.string().min(1, 'Host jest wymagany'),
+        port: zod_1.z.number().int().min(1).max(65535),
+        user: zod_1.z.string().min(1, 'Użytkownik jest wymagany'),
+        pass: zod_1.z.string().min(1, 'Hasło jest wymagane'),
+        from: zod_1.z.string().optional(),
     }),
 });

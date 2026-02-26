@@ -50,6 +50,13 @@ model UserSettings {
   aiTone            String  @default("professional")
   aiAutoSuggestions Boolean @default(true)
 
+  smtpHost       String?
+  smtpPort       Int?      @default(587)
+  smtpUser       String?
+  smtpPass       String?
+  smtpFrom       String?
+  smtpConfigured Boolean   @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

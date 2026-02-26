@@ -17,6 +17,7 @@ router.get('/:id', (0, validate_1.validate)(offers_validator_1.getOfferSchema), 
 router.post('/', (0, validate_1.validate)(offers_validator_1.createOfferSchema), offers_controller_1.offersController.create);
 router.post('/:id/duplicate', (0, validate_1.validate)(offers_validator_1.getOfferSchema), offers_controller_1.offersController.duplicate);
 router.post('/:id/publish', offers_controller_1.offersController.publish);
+router.post('/:id/send-to-client', offers_controller_1.offersController.sendToClient);
 router.post('/:id/comments', offers_controller_1.offersController.addComment);
 router.put('/:id', (0, validate_1.validate)(offers_validator_1.updateOfferSchema), offers_controller_1.offersController.update);
 router.delete('/:id', (0, validate_1.validate)(offers_validator_1.getOfferSchema), offers_controller_1.offersController.delete);

@@ -17,7 +17,7 @@ class OffersController {
         }
         catch (error) {
             console.error('[Offers] Create error:', error);
-            if (error.message === 'CLIENT_NOT_FOUND') {
+            if (error instanceof Error && error.message === 'CLIENT_NOT_FOUND') {
                 return (0, apiResponse_1.errorResponse)(res, 'CLIENT_NOT_FOUND', 'Klient nie znaleziony', 404);
             }
             return (0, apiResponse_1.errorResponse)(res, 'CREATE_FAILED', 'Nie udało się utworzyć oferty', 500);
@@ -214,6 +214,33 @@ class OffersController {
         catch (error) {
             console.error('[Offers] AddComment error:', error);
             return (0, apiResponse_1.errorResponse)(res, 'COMMENT_FAILED', 'Nie udało się dodać komentarza', 500);
+        }
+    }
+    async sendToClient(req, res) {
+        try {
+            const result = await offers_service_1.offersService.sendOfferToClient(req.params.id, req.user.id);
+            return (0, apiResponse_1.successResponse)(res, result);
+        }
+        catch (error) {
+            console.error('[Offers] SendToClient error:', error);
+            if (error instanceof Error) {
+                if (error.message === 'OFFER_NOT_FOUND') {
+                    return (0, apiResponse_1.errorResponse)(res, 'NOT_FOUND', 'Oferta nie znaleziona', 404);
+                }
+                if (error.message === 'CLIENT_NO_EMAIL') {
+                    return (0, apiResponse_1.errorResponse)(res, 'CLIENT_NO_EMAIL', 'Klient nie ma podanego adresu email', 400);
+                }
+                if (error.message === 'SMTP_NOT_CONFIGURED') {
+                    return (0, apiResponse_1.errorResponse)(res, 'SMTP_NOT_CONFIGURED', 'Skonfiguruj skrzynkę pocztową w ustawieniach, aby wysyłać maile', 400);
+                }
+                if (error.message === 'PUBLISH_FAILED') {
+                    return (0, apiResponse_1.errorResponse)(res, 'PUBLISH_FAILED', 'Nie udało się opublikować oferty', 500);
+                }
+                if (error.message === 'EMAIL_SEND_FAILED') {
+                    return (0, apiResponse_1.errorResponse)(res, 'EMAIL_SEND_FAILED', 'Nie udało się wysłać maila. Sprawdź konfigurację SMTP', 500);
+                }
+            }
+            return (0, apiResponse_1.errorResponse)(res, 'SEND_FAILED', 'Nie udało się wysłać oferty do klienta', 500);
         }
     }
 }
