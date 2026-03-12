@@ -1,4 +1,4 @@
-// src/routes/ai.routes.ts
+// smartquote_backend/src/routes/ai.routes.ts
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validate';
@@ -7,30 +7,35 @@ import {
     chatSchema,
     generateOfferSchema,
     generateEmailSchema,
-    analyzeClientSchema
+    analyzeClientSchema,
+    priceInsightSchema,
+    observerInsightSchema,
+    closingStrategySchema,
+    latestInsightsSchema,
 } from '../validators/ai.validator';
 
 const router = Router();
 
-// Wszystkie endpointy wymagają autoryzacji
 router.use(authenticate);
 
-// Główny czat z AI
 router.post('/chat', validate(chatSchema), aiController.chat);
 
-// Generowanie oferty
 router.post('/generate-offer', validate(generateOfferSchema), aiController.generateOffer);
 
-// Generowanie emaila
 router.post('/generate-email', validate(generateEmailSchema), aiController.generateEmail);
 
-// Analiza klienta
 router.get('/analyze-client/:clientId', validate(analyzeClientSchema), aiController.analyzeClient);
 
-// Inteligentne sugestie (bez walidacji - nie ma parametrów)
 router.get('/suggestions', aiController.getSuggestions);
 
-// Dodaj nowy endpoint
 router.delete('/history', aiController.clearHistory);
+
+router.post('/price-insight', validate(priceInsightSchema), aiController.priceInsight);
+
+router.get('/observer/:offerId', validate(observerInsightSchema), aiController.observerInsight);
+
+router.get('/closing-strategy/:offerId', validate(closingStrategySchema), aiController.closingStrategy);
+
+router.get('/latest-insights', validate(latestInsightsSchema), aiController.latestInsights);
 
 export default router;

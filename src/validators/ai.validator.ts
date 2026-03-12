@@ -1,4 +1,4 @@
-// src/validators/ai.validator.ts
+// smartquote_backend/src/validators/ai.validator.ts
 import { z } from 'zod';
 
 export const chatSchema = z.object({
@@ -42,4 +42,37 @@ export const analyzeClientSchema = z.object({
     params: z.object({
         clientId: z.string().uuid(),
     }),
+});
+
+export const priceInsightSchema = z.object({
+    body: z.object({
+        itemName: z.string().min(2, 'Nazwa pozycji musi mieć minimum 2 znaki').max(200),
+        category: z.string().max(100).optional(),
+    }),
+    query: z.object({}).optional(),
+    params: z.object({}).optional(),
+});
+
+export const observerInsightSchema = z.object({
+    body: z.object({}).optional(),
+    query: z.object({}).optional(),
+    params: z.object({
+        offerId: z.string().min(1, 'ID oferty jest wymagane'),
+    }),
+});
+
+export const closingStrategySchema = z.object({
+    body: z.object({}).optional(),
+    query: z.object({}).optional(),
+    params: z.object({
+        offerId: z.string().min(1, 'ID oferty jest wymagane'),
+    }),
+});
+
+export const latestInsightsSchema = z.object({
+    body: z.object({}).optional(),
+    query: z.object({
+        limit: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(1).max(20)).optional(),
+    }).optional(),
+    params: z.object({}).optional(),
 });
