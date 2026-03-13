@@ -8,10 +8,8 @@ const config_1 = require("./config");
 const prisma_1 = __importDefault(require("./lib/prisma"));
 async function main() {
     try {
-        // Test połączenia z bazą danych
         await prisma_1.default.$connect();
         console.log('✅ Połączono z bazą danych');
-        // Uruchom serwer
         app_1.default.listen(config_1.config.port, () => {
             console.log(`🚀 Serwer działa na http://localhost:${config_1.config.port}`);
             console.log(`📝 API: http://localhost:${config_1.config.port}/api`);
@@ -24,7 +22,6 @@ async function main() {
     }
 }
 main();
-// Graceful shutdown
 process.on('SIGINT', async () => {
     console.log('\n🛑 Zamykanie serwera...');
     await prisma_1.default.$disconnect();

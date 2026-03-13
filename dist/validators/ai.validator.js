@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.analyzeClientSchema = exports.generateEmailSchema = exports.generateOfferSchema = exports.chatSchema = void 0;
-// src/validators/ai.validator.ts
+exports.latestInsightsSchema = exports.closingStrategySchema = exports.observerInsightSchema = exports.priceInsightSchema = exports.analyzeClientSchema = exports.generateEmailSchema = exports.generateOfferSchema = exports.chatSchema = void 0;
+// smartquote_backend/src/validators/ai.validator.ts
 const zod_1 = require("zod");
 exports.chatSchema = zod_1.z.object({
     body: zod_1.z.object({
@@ -39,4 +39,33 @@ exports.analyzeClientSchema = zod_1.z.object({
     params: zod_1.z.object({
         clientId: zod_1.z.string().uuid(),
     }),
+});
+exports.priceInsightSchema = zod_1.z.object({
+    body: zod_1.z.object({
+        itemName: zod_1.z.string().min(2, 'Nazwa pozycji musi mieć minimum 2 znaki').max(200),
+        category: zod_1.z.string().max(100).optional(),
+    }),
+    query: zod_1.z.object({}).optional(),
+    params: zod_1.z.object({}).optional(),
+});
+exports.observerInsightSchema = zod_1.z.object({
+    body: zod_1.z.object({}).optional(),
+    query: zod_1.z.object({}).optional(),
+    params: zod_1.z.object({
+        offerId: zod_1.z.string().min(1, 'ID oferty jest wymagane'),
+    }),
+});
+exports.closingStrategySchema = zod_1.z.object({
+    body: zod_1.z.object({}).optional(),
+    query: zod_1.z.object({}).optional(),
+    params: zod_1.z.object({
+        offerId: zod_1.z.string().min(1, 'ID oferty jest wymagane'),
+    }),
+});
+exports.latestInsightsSchema = zod_1.z.object({
+    body: zod_1.z.object({}).optional(),
+    query: zod_1.z.object({
+        limit: zod_1.z.string().regex(/^\d+$/).transform(Number).pipe(zod_1.z.number().min(1).max(20)).optional(),
+    }).optional(),
+    params: zod_1.z.object({}).optional(),
 });

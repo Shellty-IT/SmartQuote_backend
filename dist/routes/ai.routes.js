@@ -33,25 +33,22 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-// src/routes/ai.routes.ts
+// smartquote_backend/src/routes/ai.routes.ts
 const express_1 = require("express");
 const auth_1 = require("../middleware/auth");
 const validate_1 = require("../middleware/validate");
 const aiController = __importStar(require("../controllers/ai.controller"));
 const ai_validator_1 = require("../validators/ai.validator");
 const router = (0, express_1.Router)();
-// Wszystkie endpointy wymagają autoryzacji
 router.use(auth_1.authenticate);
-// Główny czat z AI
 router.post('/chat', (0, validate_1.validate)(ai_validator_1.chatSchema), aiController.chat);
-// Generowanie oferty
 router.post('/generate-offer', (0, validate_1.validate)(ai_validator_1.generateOfferSchema), aiController.generateOffer);
-// Generowanie emaila
 router.post('/generate-email', (0, validate_1.validate)(ai_validator_1.generateEmailSchema), aiController.generateEmail);
-// Analiza klienta
 router.get('/analyze-client/:clientId', (0, validate_1.validate)(ai_validator_1.analyzeClientSchema), aiController.analyzeClient);
-// Inteligentne sugestie (bez walidacji - nie ma parametrów)
 router.get('/suggestions', aiController.getSuggestions);
-// Dodaj nowy endpoint
 router.delete('/history', aiController.clearHistory);
+router.post('/price-insight', (0, validate_1.validate)(ai_validator_1.priceInsightSchema), aiController.priceInsight);
+router.get('/observer/:offerId', (0, validate_1.validate)(ai_validator_1.observerInsightSchema), aiController.observerInsight);
+router.get('/closing-strategy/:offerId', (0, validate_1.validate)(ai_validator_1.closingStrategySchema), aiController.closingStrategy);
+router.get('/latest-insights', (0, validate_1.validate)(ai_validator_1.latestInsightsSchema), aiController.latestInsights);
 exports.default = router;

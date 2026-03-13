@@ -4,11 +4,9 @@ import prisma from './lib/prisma';
 
 async function main() {
     try {
-        // Test połączenia z bazą danych
         await prisma.$connect();
         console.log('✅ Połączono z bazą danych');
 
-        // Uruchom serwer
         app.listen(config.port, () => {
             console.log(`🚀 Serwer działa na http://localhost:${config.port}`);
             console.log(`📝 API: http://localhost:${config.port}/api`);
@@ -22,7 +20,6 @@ async function main() {
 
 main();
 
-// Graceful shutdown
 process.on('SIGINT', async () => {
     console.log('\n🛑 Zamykanie serwera...');
     await prisma.$disconnect();

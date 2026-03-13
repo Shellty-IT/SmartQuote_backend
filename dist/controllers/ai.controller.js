@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getSuggestions = exports.clearHistory = exports.analyzeClient = exports.generateEmail = exports.generateOffer = exports.chat = void 0;
+exports.latestInsights = exports.closingStrategy = exports.observerInsight = exports.priceInsight = exports.getSuggestions = exports.clearHistory = exports.analyzeClient = exports.generateEmail = exports.generateOffer = exports.chat = void 0;
 const ai_service_1 = require("../services/ai.service");
 const apiResponse_1 = require("../utils/apiResponse");
 const chat = async (req, res) => {
@@ -96,8 +96,7 @@ const getSuggestions = async (req, res) => {
     try {
         const userId = req.user.id;
         const context = await ai_service_1.aiService.getUserContext(userId);
-        const suggestions = []; // ← Użyj typu
-        // Zaległe follow-upy
+        const suggestions = [];
         if (context.stats?.pendingFollowUps && context.stats.pendingFollowUps > 0) {
             suggestions.push({
                 type: 'warning',
@@ -106,7 +105,6 @@ const getSuggestions = async (req, res) => {
                 action: { type: 'navigate', path: '/dashboard/followups?status=overdue' },
             });
         }
-        // Oferty do przypomnienia
         const expiringOffers = context.offers?.filter((o) => {
             if (o.status !== 'SENT' || !o.validUntil)
                 return false;
@@ -121,7 +119,6 @@ const getSuggestions = async (req, res) => {
                 action: { type: 'navigate', path: '/dashboard/offers?expiring=true' },
             });
         }
-        // Nieaktywni klienci
         const inactiveClients = context.clients?.filter((c) => !c.isActive);
         if (inactiveClients && inactiveClients.length > 5) {
             suggestions.push({
@@ -140,3 +137,59 @@ const getSuggestions = async (req, res) => {
     }
 };
 exports.getSuggestions = getSuggestions;
+const priceInsight = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { itemName, category } = req.body;
+        const result = await ai_service_1.aiService.getPriceInsight(userId, itemName, category);
+        return (0, apiResponse_1.successResponse)(res, result);
+    }
+    catch (error) {
+        console.error('Price Insight Error:', error);
+        const message = error instanceof Error ? error.message : 'Błąd analizy cenowej';
+        return (0, apiResponse_1.errorResponse)(res, 'AI_ERROR', message, 500);
+    }
+};
+exports.priceInsight = priceInsight;
+const observerInsight = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { offerId } = req.params;
+        const result = await ai_service_1.aiService.getObserverInsight(userId, offerId);
+        return (0, apiResponse_1.successResponse)(res, result);
+    }
+    catch (error) {
+        console.error('Observer Insight Error:', error);
+        const message = error instanceof Error ? error.message : 'Błąd analizy zachowań';
+        return (0, apiResponse_1.errorResponse)(res, 'AI_ERROR', message, 500);
+    }
+};
+exports.observerInsight = observerInsight;
+const closingStrategy = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { offerId } = req.params;
+        const result = await ai_service_1.aiService.getClosingStrategy(userId, offerId);
+        return (0, apiResponse_1.successResponse)(res, result);
+    }
+    catch (error) {
+        console.error('Closing Strategy Error:', error);
+        const message = error instanceof Error ? error.message : 'Błąd generowania strategii';
+        return (0, apiResponse_1.errorResponse)(res, 'AI_ERROR', message, 500);
+    }
+};
+exports.closingStrategy = closingStrategy;
+const latestInsights = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const limit = req.query.limit ? Number(req.query.limit) : 3;
+        const result = await ai_service_1.aiService.getLatestInsights(userId, limit);
+        return (0, apiResponse_1.successResponse)(res, result);
+    }
+    catch (error) {
+        console.error('Latest Insights Error:', error);
+        const message = error instanceof Error ? error.message : 'Błąd pobierania wniosków AI';
+        return (0, apiResponse_1.errorResponse)(res, 'AI_ERROR', message, 500);
+    }
+};
+exports.latestInsights = latestInsights;
