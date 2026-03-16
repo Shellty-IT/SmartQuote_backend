@@ -245,12 +245,50 @@ export interface AIStats {
     monthlyRevenue: number;
 }
 
+export interface AIContextClient {
+    id: string;
+    name: string;
+    company: string | null;
+    email: string | null;
+    type: string;
+    isActive: boolean;
+}
+
+export interface AIContextOffer {
+    id: string;
+    number: string;
+    title: string;
+    status: string;
+    totalGross: unknown;
+    validUntil: Date | null;
+    client: { name: string; company: string | null } | null;
+}
+
+export interface AIContextContract {
+    id: string;
+    number: string;
+    title: string;
+    status: string;
+    totalGross: unknown;
+    client: { name: string; company: string | null } | null;
+}
+
+export interface AIContextFollowUp {
+    id: string;
+    title: string;
+    type: string;
+    status: string;
+    priority: string;
+    dueDate: Date;
+    client: { name: string } | null;
+}
+
 export interface AIContext {
     userId: string;
-    clients?: Record<string, unknown>[];
-    offers?: Record<string, unknown>[];
-    contracts?: Record<string, unknown>[];
-    followUps?: Record<string, unknown>[];
+    clients?: AIContextClient[];
+    offers?: AIContextOffer[];
+    contracts?: AIContextContract[];
+    followUps?: AIContextFollowUp[];
     stats?: AIStats;
 }
 

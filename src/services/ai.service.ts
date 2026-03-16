@@ -1,4 +1,5 @@
 // smartquote_backend/src/services/ai.service.ts
+
 import { GoogleGenAI } from '@google/genai';
 import { Prisma } from '@prisma/client';
 import { config } from '../config';
@@ -167,7 +168,7 @@ ${context.clients?.slice(0, 10).map(c =>
 
 OSTATNIE OFERTY (do 5):
 ${context.offers?.slice(0, 5).map(o =>
-            `- ${o.number}: ${o.title} - ${offerStatusLabels[o.status] || o.status} - ${o.totalGross} PLN dla ${o.client?.name || o.client?.company}`
+            `- ${o.number}: ${o.title} - ${offerStatusLabels[o.status] || o.status} - ${o.totalGross} PLN dla ${o.client?.name || o.client?.company || 'Nieznany'}`
         ).join('\n') || 'Brak ofert'}
 
 ZALEGŁE FOLLOW-UPY:
@@ -479,7 +480,7 @@ Zwróć TYLKO JSON (bez żadnego dodatkowego tekstu, bez markdown) w formacie:
         } else {
             result = {
                 score: 5,
-                potential: 'średni',
+                potential: 'sredni',
                 summary: responseText,
                 recommendations: [],
                 nextAction: 'Skontaktuj się z klientem',
@@ -695,7 +696,7 @@ Zwróć TYLKO JSON (bez markdown):
         const legacySummary = legacyInsights.length > 0
             ? legacyInsights.map(l => {
                 const ins = l.insights as Record<string, unknown>;
-                return `[${l.outcome}] ${ins.pricingInsight || 'brak wniosków cenowych'}`;
+                return `[${l.outcome}] ${typeof ins.pricingInsight === 'string' ? ins.pricingInsight : 'brak wniosków cenowych'}`;
             }).join('\n')
             : 'Brak wniosków z poprzednich ofert.';
 

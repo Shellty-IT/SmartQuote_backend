@@ -1,4 +1,5 @@
 // smartquote_backend/src/controllers/ai.controller.ts
+
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../types';
 import { aiService } from '../services/ai.service';
@@ -116,7 +117,7 @@ export const getSuggestions = async (req: AuthenticatedRequest, res: Response) =
             });
         }
 
-        const expiringOffers = context.offers?.filter((o: { status: string; validUntil: Date | null }) => {
+        const expiringOffers = context.offers?.filter((o) => {
             if (o.status !== 'SENT' || !o.validUntil) return false;
             const daysLeft = Math.ceil((new Date(o.validUntil).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
             return daysLeft > 0 && daysLeft <= 7;
@@ -131,7 +132,7 @@ export const getSuggestions = async (req: AuthenticatedRequest, res: Response) =
             });
         }
 
-        const inactiveClients = context.clients?.filter((c: { isActive: boolean }) => !c.isActive);
+        const inactiveClients = context.clients?.filter((c) => !c.isActive);
         if (inactiveClients && inactiveClients.length > 5) {
             suggestions.push({
                 type: 'tip',
