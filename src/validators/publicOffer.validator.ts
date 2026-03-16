@@ -24,6 +24,8 @@ export const acceptPublicOfferSchema = z.object({
                 errorMap: () => ({ message: 'Potwierdzenie akceptacji jest wymagane' }),
             }),
         selectedVariant: z.string().max(100).optional().nullable(),
+        clientName: z.string().max(200).optional().nullable(),
+        clientEmail: z.string().email('Nieprawidłowy adres email').max(300).optional().nullable(),
         selectedItems: z
             .array(
                 z.object({

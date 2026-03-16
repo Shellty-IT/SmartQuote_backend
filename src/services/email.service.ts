@@ -4,45 +4,59 @@ import nodemailer from 'nodemailer';
 import type { SmtpConfig } from '../types';
 
 interface EmailOptions {
-    to: string;
-    subject: string;
-    html: string;
+    readonly to: string;
+    readonly subject: string;
+    readonly html: string;
 }
 
 interface OfferEmailData {
-    offerNumber: string;
-    offerTitle: string;
-    clientName: string;
-    offerId: string;
+    readonly offerNumber: string;
+    readonly offerTitle: string;
+    readonly clientName: string;
+    readonly offerId: string;
 }
 
 interface OfferAcceptedEmailData extends OfferEmailData {
-    totalGross: number;
-    currency: string;
+    readonly totalGross: number;
+    readonly currency: string;
 }
 
 interface OfferRejectedEmailData extends OfferEmailData {
-    reason?: string;
+    readonly reason?: string;
 }
 
 interface CommentEmailData extends OfferEmailData {
-    commentPreview: string;
+    readonly commentPreview: string;
 }
 
 interface OfferLinkEmailData {
-    offerNumber: string;
-    offerTitle: string;
-    clientName: string;
-    totalGross: number;
-    currency: string;
-    validUntil: string | null;
-    publicUrl: string;
-    sellerName: string;
-    companyName: string | null;
+    readonly offerNumber: string;
+    readonly offerTitle: string;
+    readonly clientName: string;
+    readonly totalGross: number;
+    readonly currency: string;
+    readonly validUntil: string | null;
+    readonly publicUrl: string;
+    readonly sellerName: string;
+    readonly companyName: string | null;
+}
+
+interface AcceptanceConfirmationEmailData {
+    readonly offerNumber: string;
+    readonly offerTitle: string;
+    readonly clientName: string;
+    readonly totalGross: number;
+    readonly currency: string;
+    readonly contentHash: string;
+    readonly acceptedAt: string;
+    readonly selectedVariant?: string | null;
+    readonly publicUrl: string;
+    readonly sellerName: string;
+    readonly companyName: string | null;
 }
 
 class EmailService {
-    private frontendUrl: string;
+    private readonly frontendUrl: string;
 
     constructor() {
         this.frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
@@ -74,6 +88,17 @@ class EmailService {
             currency,
             minimumFractionDigits: 2,
         }).format(amount);
+    }
+
+    private formatDateTime(isoString: string): string {
+        return new Date(isoString).toLocaleString('pl-PL', {
+            day: '2-digit',
+            month: 'long',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+        });
     }
 
     private baseTemplate(content: string): string {
@@ -241,6 +266,63 @@ ${data.companyName ? `<br/><span style="color:#64748b;">${data.companyName}</spa
         return this.send({
             to,
             subject: `Oferta ${data.offerNumber} — ${data.offerTitle} | ${senderLabel}`,
+            html,
+        }, smtpConfig);
+    }
+
+    async sendAcceptanceConfirmation(to: string, data: AcceptanceConfirmationEmailData, smtpConfig: SmtpConfig): Promise<boolean> {
+        const variantBlock = data.selectedVariant
+            ? `<tr><td style="padding:0 16px 16px;">
+<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Wybrany wariant</p>
+<p style="margin:0;color:#0f172a;font-size:14px;font-weight:600;">${data.selectedVariant}</p>
+</td></tr>`
+            : '';
+
+        const html = this.baseTemplate(`
+<div style="text-align:center;margin-bottom:24px;">
+<div style="width:56px;height:56px;background:#ecfdf5;border-radius:28px;line-height:56px;text-align:center;font-size:28px;display:inline-block;margin-bottom:12px;">🔐</div>
+<h2 style="margin:0;color:#0f172a;font-size:20px;font-weight:700;">Potwierdzenie akceptacji oferty</h2>
+</div>
+<p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px;">
+Dzień dobry${data.clientName ? `, ${data.clientName}` : ''}! Potwierdzamy przyjęcie Twojej akceptacji oferty.
+</p>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">
+<tr><td style="padding:16px;">
+<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Oferta</p>
+<p style="margin:0;color:#0f172a;font-size:15px;font-weight:600;">${data.offerTitle}</p>
+<p style="margin:4px 0 0;color:#64748b;font-size:13px;">${data.offerNumber}</p>
+</td></tr>
+<tr><td style="padding:0 16px 16px;">
+<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Wartość brutto</p>
+<p style="margin:0;color:#0891b2;font-size:20px;font-weight:700;">${this.formatCurrency(data.totalGross, data.currency)}</p>
+</td></tr>
+${variantBlock}
+<tr><td style="padding:0 16px 16px;">
+<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Data akceptacji</p>
+<p style="margin:0;color:#0f172a;font-size:14px;">${this.formatDateTime(data.acceptedAt)}</p>
+</td></tr>
+</table>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0fdf4;border-radius:12px;border:1px solid #bbf7d0;margin-top:16px;">
+<tr><td style="padding:16px;">
+<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Cyfrowy odcisk treści (SHA-256)</p>
+<p style="margin:0;color:#166534;font-size:12px;font-family:monospace;word-break:break-all;line-height:1.6;">${data.contentHash}</p>
+</td></tr>
+</table>
+<p style="color:#64748b;font-size:12px;line-height:1.6;margin:16px 0 0;">
+Ten hash jest unikalnym odciskiem cyfrowym treści oferty w momencie akceptacji.
+Każda zmiana w treści oferty spowodowałaby wygenerowanie innego hasha — co potwierdza,
+że dokument nie został zmodyfikowany po akceptacji.
+</p>
+${this.ctaButton(data.publicUrl, 'Zobacz ofertę i pobierz PDF →')}
+<p style="color:#94a3b8;font-size:12px;margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0;">
+Pozdrawiam,<br/>
+<strong style="color:#475569;">${data.sellerName}</strong>
+${data.companyName ? `<br/><span style="color:#64748b;">${data.companyName}</span>` : ''}
+</p>`);
+
+        return this.send({
+            to,
+            subject: `🔐 Potwierdzenie akceptacji oferty ${data.offerNumber}`,
             html,
         }, smtpConfig);
     }

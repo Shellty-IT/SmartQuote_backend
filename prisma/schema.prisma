@@ -172,6 +172,8 @@ model Offer {
   lastViewedAt       DateTime?
   clientSelectedData Json?
 
+  requireAuditTrail Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -186,6 +188,7 @@ model Offer {
   interactions OfferInteraction[]
   comments     OfferComment[]
   legacyInsights OfferLegacyInsight[]
+  acceptanceLog  OfferAcceptanceLog?
 
   @@unique([userId, number])
   @@index([userId])
@@ -287,6 +290,34 @@ model OfferLegacyInsight {
   @@index([userId, createdAt])
   @@index([offerId])
   @@map("offer_legacy_insights")
+}
+
+model OfferAcceptanceLog {
+  id        String   @id @default(cuid())
+  offerId   String   @unique
+  offer     Offer    @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  ipAddress    String
+  userAgent    String
+  acceptedAt   DateTime @default(now())
+  contentHash  String
+  acceptedData Json
+
+  clientName   String?
+  clientEmail  String?
+
+  selectedVariant String?
+
+  totalNet    Decimal @db.Decimal(12, 2)
+  totalVat    Decimal @db.Decimal(12, 2)
+  totalGross  Decimal @db.Decimal(12, 2)
+  currency    String  @default("PLN")
+
+  createdAt DateTime @default(now())
+
+  @@index([offerId])
+  @@index([contentHash])
+  @@map("offer_acceptance_logs")
 }
 
 model Notification {

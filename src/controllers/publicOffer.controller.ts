@@ -15,6 +15,12 @@ function handleOfferError(res: Response, errorCode: string): Response {
     return errorResponse(res, errorCode, mapped.message, mapped.status);
 }
 
+function extractIp(req: Request): string {
+    return (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+        || req.socket.remoteAddress
+        || 'unknown';
+}
+
 export class PublicOfferController {
     async getOffer(req: Request<{ token: string }>, res: Response) {
         try {
@@ -35,10 +41,7 @@ export class PublicOfferController {
     async registerView(req: Request<{ token: string }>, res: Response) {
         try {
             const token = req.params.token;
-            const ipAddress =
-                (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-                req.socket.remoteAddress ||
-                '';
+            const ipAddress = extractIp(req);
             const userAgent = req.headers['user-agent'] || '';
 
             await publicOfferService.registerView(token, ipAddress, userAgent);
@@ -53,13 +56,24 @@ export class PublicOfferController {
     async acceptOffer(req: Request<{ token: string }>, res: Response) {
         try {
             const token = req.params.token;
-            const { selectedItems, confirmationChecked, selectedVariant } = req.body;
+            const { selectedItems, confirmationChecked, selectedVariant, clientName, clientEmail } = req.body;
 
             if (!confirmationChecked) {
                 return errorResponse(res, 'CONFIRMATION_REQUIRED', 'Wymagane potwierdzenie akceptacji', 400);
             }
 
-            const result = await publicOfferService.acceptOffer(token, selectedItems || [], selectedVariant);
+            const ipAddress = extractIp(req);
+            const userAgent = req.headers['user-agent'] || '';
+
+            const result = await publicOfferService.acceptOffer({
+                token,
+                selectedItems: selectedItems || [],
+                selectedVariant,
+                ipAddress,
+                userAgent,
+                clientName,
+                clientEmail,
+            });
 
             if ('error' in result && result.error) {
                 return handleOfferError(res, result.error);

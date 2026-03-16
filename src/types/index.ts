@@ -92,6 +92,7 @@ export interface CreateOfferInput {
     notes?: string;
     terms?: string;
     paymentDays?: number;
+    requireAuditTrail?: boolean;
     items: OfferItemInput[];
 }
 
@@ -103,12 +104,15 @@ export interface UpdateOfferInput {
     notes?: string;
     terms?: string;
     paymentDays?: number;
+    requireAuditTrail?: boolean;
     items?: OfferItemInput[];
 }
 
 export interface PublicOfferAcceptInput {
     confirmationChecked: boolean;
     selectedVariant?: string;
+    clientName?: string;
+    clientEmail?: string;
     selectedItems: Array<{
         id: string;
         isSelected: boolean;

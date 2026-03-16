@@ -11,29 +11,29 @@ import { emailService } from './email.service';
 import { getDecryptedSmtpConfig } from './settings.service';
 
 interface ItemCalculation {
-    quantity: number;
-    unitPrice: number;
-    vatRate?: number;
-    discount?: number;
+    readonly quantity: number;
+    readonly unitPrice: number;
+    readonly vatRate?: number;
+    readonly discount?: number;
 }
 
 interface ItemWithTotals {
-    name: string;
-    description: string | undefined;
-    quantity: number;
-    unit: string;
-    unitPrice: number;
-    vatRate: number;
-    discount: number;
-    totalNet: Decimal;
-    totalVat: Decimal;
-    totalGross: Decimal;
-    position: number;
-    isOptional: boolean;
-    isSelected: boolean;
-    minQuantity: number;
-    maxQuantity: number;
-    variantName: string | null;
+    readonly name: string;
+    readonly description: string | undefined;
+    readonly quantity: number;
+    readonly unit: string;
+    readonly unitPrice: number;
+    readonly vatRate: number;
+    readonly discount: number;
+    readonly totalNet: Decimal;
+    readonly totalVat: Decimal;
+    readonly totalGross: Decimal;
+    readonly position: number;
+    readonly isOptional: boolean;
+    readonly isSelected: boolean;
+    readonly minQuantity: number;
+    readonly maxQuantity: number;
+    readonly variantName: string | null;
 }
 
 export class OffersService {
@@ -145,6 +145,7 @@ export class OffersService {
                 notes: data.notes,
                 terms: data.terms,
                 paymentDays: data.paymentDays || 14,
+                requireAuditTrail: data.requireAuditTrail || false,
                 totalNet: offerTotals.totalNet,
                 totalVat: offerTotals.totalVat,
                 totalGross: offerTotals.totalGross,
@@ -173,6 +174,7 @@ export class OffersService {
                 items: {
                     orderBy: { position: 'asc' },
                 },
+                acceptanceLog: true,
                 _count: {
                     select: { followUps: true, comments: true, views: true },
                 },
@@ -249,7 +251,7 @@ export class OffersService {
 
         const previousStatus = existing.status;
 
-        let updateData: Prisma.OfferUpdateInput = {
+        const updateData: Prisma.OfferUpdateInput = {
             title: data.title,
             description: data.description,
             status: data.status as OfferStatus,
@@ -258,6 +260,10 @@ export class OffersService {
             terms: data.terms,
             paymentDays: data.paymentDays,
         };
+
+        if (data.requireAuditTrail !== undefined) {
+            updateData.requireAuditTrail = data.requireAuditTrail;
+        }
 
         if (data.status) {
             const now = new Date();
@@ -396,6 +402,7 @@ export class OffersService {
                 notes: original.notes,
                 terms: original.terms,
                 paymentDays: original.paymentDays,
+                requireAuditTrail: original.requireAuditTrail,
                 totalNet: original.totalNet,
                 totalVat: original.totalVat,
                 totalGross: original.totalGross,
