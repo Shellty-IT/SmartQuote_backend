@@ -2,6 +2,7 @@
 
 import prisma from '../lib/prisma';
 import { Decimal } from '@prisma/client/runtime/library';
+import { Prisma } from '@prisma/client';
 import { aiService } from './ai.service';
 import { notificationService } from './notification.service';
 
@@ -60,9 +61,16 @@ export class PublicOfferService {
             ? new Date(offer.validUntil) < new Date()
             : false;
 
+        const variantNames = [...new Set(
+            offer.items
+                .filter((item) => item.variantName)
+                .map((item) => item.variantName!)
+        )];
+
         return {
             expired: isExpired,
             decided: offer.status === 'ACCEPTED' || offer.status === 'REJECTED',
+            variants: variantNames,
             offer: {
                 id: offer.id,
                 number: offer.number,
@@ -97,6 +105,7 @@ export class PublicOfferService {
                     isSelected: item.isSelected,
                     minQuantity: item.minQuantity,
                     maxQuantity: item.maxQuantity,
+                    variantName: item.variantName,
                 })),
                 client: {
                     name: offer.client.name,
@@ -192,7 +201,8 @@ export class PublicOfferService {
 
     async acceptOffer(
         token: string,
-        selectedItems: Array<{ id: string; isSelected: boolean; quantity: number }>
+        selectedItems: Array<{ id: string; isSelected: boolean; quantity: number }>,
+        selectedVariant?: string
     ) {
         const offer = await prisma.offer.findFirst({
             where: { publicToken: token, isInteractive: true },
@@ -215,11 +225,16 @@ export class PublicOfferService {
             return { error: 'EXPIRED' as const };
         }
 
+        const hasVariants = offer.items.some((item) => item.variantName);
+        const visibleItems = hasVariants
+            ? offer.items.filter((item) => !item.variantName || item.variantName === selectedVariant)
+            : offer.items;
+
         let totalNet = new Decimal(0);
         let totalVat = new Decimal(0);
         let totalGross = new Decimal(0);
 
-        const clientSelectedData = offer.items.map((item) => {
+        const clientSelectedData = visibleItems.map((item) => {
             const selection = selectedItems.find((s) => s.id === item.id);
 
             const isSelected = item.isOptional
@@ -260,6 +275,7 @@ export class PublicOfferService {
                 netto: itemNet.toDecimalPlaces(2).toNumber(),
                 vat: itemVat.toDecimalPlaces(2).toNumber(),
                 brutto: itemGross.toDecimalPlaces(2).toNumber(),
+                variantName: item.variantName,
             };
         });
 
@@ -269,7 +285,10 @@ export class PublicOfferService {
                 data: {
                     status: 'ACCEPTED',
                     acceptedAt: new Date(),
-                    clientSelectedData: clientSelectedData as unknown as any,
+                    clientSelectedData: {
+                        selectedVariant: selectedVariant || null,
+                        items: clientSelectedData,
+                    } as unknown as Prisma.InputJsonValue,
                 },
             }),
             prisma.offerInteraction.create({
@@ -277,6 +296,7 @@ export class PublicOfferService {
                     offerId: offer.id,
                     type: 'ACCEPT',
                     details: {
+                        selectedVariant: selectedVariant || null,
                         selectedItems: clientSelectedData,
                         totalNet: totalNet.toDecimalPlaces(2).toNumber(),
                         totalVat: totalVat.toDecimalPlaces(2).toNumber(),
@@ -310,6 +330,7 @@ export class PublicOfferService {
                 clientName: offer.client.name,
                 clientCompany: offer.client.company,
                 clientEmail: offer.client.email,
+                selectedVariant: selectedVariant || null,
                 totalNet: totalNet.toDecimalPlaces(2).toNumber(),
                 totalVat: totalVat.toDecimalPlaces(2).toNumber(),
                 totalGross: grossValue,
@@ -442,7 +463,8 @@ export class PublicOfferService {
 
     async trackSelection(
         token: string,
-        items: Array<{ id: string; isSelected: boolean; quantity: number }>
+        items: Array<{ id: string; isSelected: boolean; quantity: number }>,
+        selectedVariant?: string
     ) {
         const offer = await prisma.offer.findFirst({
             where: { publicToken: token, isInteractive: true },
@@ -459,7 +481,7 @@ export class PublicOfferService {
             data: {
                 offerId: offer.id,
                 type: 'ITEM_SELECT',
-                details: { items },
+                details: { items, selectedVariant: selectedVariant || null },
             },
         });
 

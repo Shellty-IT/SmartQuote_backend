@@ -33,6 +33,7 @@ interface ItemWithTotals {
     isSelected: boolean;
     minQuantity: number;
     maxQuantity: number;
+    variantName: string | null;
 }
 
 export class OffersService {
@@ -88,6 +89,33 @@ export class OffersService {
             isSelected: true,
             minQuantity: item.minQuantity || 1,
             maxQuantity: item.maxQuantity || 100,
+            variantName: item.variantName || null,
+        };
+    }
+
+    private calculateOfferTotals(items: ItemWithTotals[]): {
+        totalNet: Decimal;
+        totalVat: Decimal;
+        totalGross: Decimal;
+    } {
+        const baseItems = items.filter((item) => !item.variantName);
+
+        if (baseItems.length === items.length) {
+            return {
+                totalNet: items.reduce((sum, item) => sum.plus(item.totalNet), new Decimal(0)),
+                totalVat: items.reduce((sum, item) => sum.plus(item.totalVat), new Decimal(0)),
+                totalGross: items.reduce((sum, item) => sum.plus(item.totalGross), new Decimal(0)),
+            };
+        }
+
+        const variantNames = [...new Set(items.filter((i) => i.variantName).map((i) => i.variantName!))];
+        const firstVariantItems = items.filter((i) => i.variantName === variantNames[0]);
+        const allDefaultItems = [...baseItems, ...firstVariantItems];
+
+        return {
+            totalNet: allDefaultItems.reduce((sum, item) => sum.plus(item.totalNet), new Decimal(0)),
+            totalVat: allDefaultItems.reduce((sum, item) => sum.plus(item.totalVat), new Decimal(0)),
+            totalGross: allDefaultItems.reduce((sum, item) => sum.plus(item.totalGross), new Decimal(0)),
         };
     }
 
@@ -106,18 +134,7 @@ export class OffersService {
             this.buildItemWithTotals(item, index)
         );
 
-        const totalNet = itemsWithTotals.reduce(
-            (sum: Decimal, item: ItemWithTotals) => sum.plus(item.totalNet),
-            new Decimal(0)
-        );
-        const totalVat = itemsWithTotals.reduce(
-            (sum: Decimal, item: ItemWithTotals) => sum.plus(item.totalVat),
-            new Decimal(0)
-        );
-        const totalGross = itemsWithTotals.reduce(
-            (sum: Decimal, item: ItemWithTotals) => sum.plus(item.totalGross),
-            new Decimal(0)
-        );
+        const offerTotals = this.calculateOfferTotals(itemsWithTotals);
 
         return prisma.offer.create({
             data: {
@@ -128,9 +145,9 @@ export class OffersService {
                 notes: data.notes,
                 terms: data.terms,
                 paymentDays: data.paymentDays || 14,
-                totalNet,
-                totalVat,
-                totalGross,
+                totalNet: offerTotals.totalNet,
+                totalVat: offerTotals.totalVat,
+                totalGross: offerTotals.totalGross,
                 userId,
                 clientId: data.clientId,
                 items: {
@@ -267,18 +284,7 @@ export class OffersService {
                 this.buildItemWithTotals(item, index)
             );
 
-            const totalNet = itemsWithTotals.reduce(
-                (sum: Decimal, item: ItemWithTotals) => sum.plus(item.totalNet),
-                new Decimal(0)
-            );
-            const totalVat = itemsWithTotals.reduce(
-                (sum: Decimal, item: ItemWithTotals) => sum.plus(item.totalVat),
-                new Decimal(0)
-            );
-            const totalGross = itemsWithTotals.reduce(
-                (sum: Decimal, item: ItemWithTotals) => sum.plus(item.totalGross),
-                new Decimal(0)
-            );
+            const offerTotals = this.calculateOfferTotals(itemsWithTotals);
 
             result = await prisma.$transaction(async (tx) => {
                 await tx.offerItem.deleteMany({ where: { offerId: id } });
@@ -287,9 +293,9 @@ export class OffersService {
                     where: { id },
                     data: {
                         ...updateData,
-                        totalNet,
-                        totalVat,
-                        totalGross,
+                        totalNet: offerTotals.totalNet,
+                        totalVat: offerTotals.totalVat,
+                        totalGross: offerTotals.totalGross,
                         items: {
                             create: itemsWithTotals,
                         },
@@ -413,6 +419,7 @@ export class OffersService {
                         isSelected: true,
                         minQuantity: item.minQuantity,
                         maxQuantity: item.maxQuantity,
+                        variantName: item.variantName,
                     })),
                 },
             },

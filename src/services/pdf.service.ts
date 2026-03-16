@@ -28,6 +28,7 @@ interface PDFOfferItem {
     totalNet: Decimal;
     totalVat: Decimal;
     totalGross: Decimal;
+    variantName: string | null;
 }
 
 interface PDFContractItem {
@@ -95,6 +96,14 @@ interface PDFContract {
     user: PDFUser;
 }
 
+interface VariantGroup {
+    name: string | null;
+    items: PDFOfferItem[];
+    totalNet: Decimal;
+    totalVat: Decimal;
+    totalGross: Decimal;
+}
+
 const pl = (str: string): string => {
     const map: Record<string, string> = {
         'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z',
@@ -125,7 +134,103 @@ const contractStatusMap: Record<string, string> = {
     COMPLETED: 'Zakonczona', TERMINATED: 'Rozwiazana', EXPIRED: 'Wygasla'
 };
 
+function groupItemsByVariant(items: PDFOfferItem[]): VariantGroup[] {
+    const hasVariants = items.some((item) => item.variantName);
+    if (!hasVariants) {
+        return [{
+            name: null,
+            items,
+            totalNet: items.reduce((s, i) => s.plus(i.totalNet), new Decimal(0)),
+            totalVat: items.reduce((s, i) => s.plus(i.totalVat), new Decimal(0)),
+            totalGross: items.reduce((s, i) => s.plus(i.totalGross), new Decimal(0)),
+        }];
+    }
+
+    const groups: VariantGroup[] = [];
+
+    const baseItems = items.filter((i) => !i.variantName);
+    if (baseItems.length > 0) {
+        groups.push({
+            name: null,
+            items: baseItems,
+            totalNet: baseItems.reduce((s, i) => s.plus(i.totalNet), new Decimal(0)),
+            totalVat: baseItems.reduce((s, i) => s.plus(i.totalVat), new Decimal(0)),
+            totalGross: baseItems.reduce((s, i) => s.plus(i.totalGross), new Decimal(0)),
+        });
+    }
+
+    const variantNames = [...new Set(items.filter((i) => i.variantName).map((i) => i.variantName!))];
+    for (const vName of variantNames) {
+        const vItems = items.filter((i) => i.variantName === vName);
+        groups.push({
+            name: vName,
+            items: vItems,
+            totalNet: vItems.reduce((s, i) => s.plus(i.totalNet), new Decimal(0)),
+            totalVat: vItems.reduce((s, i) => s.plus(i.totalVat), new Decimal(0)),
+            totalGross: vItems.reduce((s, i) => s.plus(i.totalGross), new Decimal(0)),
+        });
+    }
+
+    return groups;
+}
+
 export class PDFService {
+    private renderItemsTable(
+        doc: PDFKit.PDFDocument,
+        items: PDFOfferItem[] | PDFContractItem[],
+        startY: number,
+        accentColor: string,
+        W: number,
+        L: number
+    ): number {
+        let Y = startY;
+        const cols = [22, 175, 40, 30, 58, 35, 35, 70];
+        const headers = ['Lp', 'Nazwa', 'Ilosc', 'Jm', 'Cena', 'VAT', 'Rabat', 'Netto'];
+        const tW = cols.reduce((a, b) => a + b, 0);
+        const tX = L + (W - tW) / 2;
+
+        doc.rect(tX, Y, tW, 18).fill(accentColor);
+        let x = tX;
+        doc.font('Helvetica-Bold').fontSize(7).fillColor('#fff');
+        headers.forEach((h, i) => {
+            doc.text(h, x + 2, Y + 5, { width: cols[i] - 4, align: 'center' });
+            x += cols[i];
+        });
+        Y += 18;
+
+        items.forEach((item, idx) => {
+            if (Y > 700) {
+                doc.addPage();
+                Y = 40;
+            }
+
+            const bg = idx % 2 === 0 ? '#fff' : '#f8fafc';
+            doc.rect(tX, Y, tW, 16).fill(bg).stroke('#e2e8f0');
+
+            const d = Number(item.discount);
+            const row = [
+                String(idx + 1),
+                txt(item.name).slice(0, 28),
+                String(Number(item.quantity)),
+                item.unit,
+                money(item.unitPrice, ''),
+                Number(item.vatRate) + '%',
+                d > 0 ? d + '%' : '-',
+                money(item.totalNet, '')
+            ];
+
+            x = tX;
+            doc.font('Helvetica').fontSize(7).fillColor('#1e293b');
+            row.forEach((v, i) => {
+                doc.text(v, x + 2, Y + 4, { width: cols[i] - 4, align: i === 1 ? 'left' : 'center' });
+                x += cols[i];
+            });
+            Y += 16;
+        });
+
+        return Y;
+    }
+
     generateOfferPDF(offer: PDFOffer): Promise<Buffer> {
         return new Promise((resolve, reject) => {
             const chunks: Buffer[] = [];
@@ -143,9 +248,9 @@ export class PDFService {
             const W = 515;
             const L = 40;
             let Y = 40;
+            const ACCENT = '#0891b2';
 
-            // === HEADER ===
-            doc.rect(0, 0, 595, 45).fill('#0891b2');
+            doc.rect(0, 0, 595, 45).fill(ACCENT);
             doc.font('Helvetica-Bold').fontSize(18).fillColor('#fff').text('SmartQuote', L, 14);
 
             const company = txt(offer.user.company || offer.user.name || '');
@@ -155,18 +260,15 @@ export class PDFService {
 
             Y = 55;
 
-            // === TITLE ===
             doc.font('Helvetica-Bold').fontSize(16).fillColor('#1e293b').text('OFERTA HANDLOWA', L, Y);
-            doc.font('Helvetica').fontSize(10).fillColor('#0891b2').text('Nr: ' + offer.number, L + 170, Y + 2);
+            doc.font('Helvetica').fontSize(10).fillColor(ACCENT).text('Nr: ' + offer.number, L + 170, Y + 2);
             Y += 28;
 
-            // === PARTIES ===
             const boxW = 248;
             const boxH = 70;
 
-            // Seller
             doc.rect(L, Y, boxW, boxH).fill('#f1f5f9');
-            doc.rect(L, Y, boxW, 16).fill('#0891b2');
+            doc.rect(L, Y, boxW, 16).fill(ACCENT);
             doc.font('Helvetica-Bold').fontSize(8).fillColor('#fff').text('SPRZEDAWCA', L + 8, Y + 4);
             doc.font('Helvetica-Bold').fontSize(9).fillColor('#1e293b').text(company, L + 8, Y + 22);
             doc.font('Helvetica').fontSize(8);
@@ -174,10 +276,9 @@ export class PDFService {
             if (offer.user.email) { doc.text(offer.user.email, L + 8, sY); sY += 10; }
             if (offer.user.phone) { doc.text(offer.user.phone, L + 8, sY); }
 
-            // Buyer
             const bX = L + boxW + 19;
             doc.rect(bX, Y, boxW, boxH).fill('#f1f5f9');
-            doc.rect(bX, Y, boxW, 16).fill('#0891b2');
+            doc.rect(bX, Y, boxW, 16).fill(ACCENT);
             doc.font('Helvetica-Bold').fontSize(8).fillColor('#fff').text('NABYWCA', bX + 8, Y + 4);
 
             const client = txt(offer.client.type === 'COMPANY' ? (offer.client.company || offer.client.name) : offer.client.name);
@@ -189,7 +290,6 @@ export class PDFService {
 
             Y += boxH + 10;
 
-            // === INFO BAR ===
             doc.rect(L, Y, W, 26).fill('#f1f5f9');
             const infos = [
                 ['Data', date(offer.createdAt)],
@@ -205,7 +305,6 @@ export class PDFService {
             });
             Y += 32;
 
-            // === OFFER TITLE & DESC ===
             if (offer.title) {
                 doc.font('Helvetica-Bold').fontSize(11).fillColor('#1e293b').text(txt(offer.title), L, Y);
                 Y += 15;
@@ -215,50 +314,48 @@ export class PDFService {
                 Y += 15;
             }
 
-            // === TABLE ===
-            const cols = [22, 175, 40, 30, 58, 35, 35, 70];
-            const headers = ['Lp', 'Nazwa', 'Ilosc', 'Jm', 'Cena', 'VAT', 'Rabat', 'Netto'];
-            const tW = cols.reduce((a, b) => a + b, 0);
-            const tX = L + (W - tW) / 2;
+            const variantGroups = groupItemsByVariant(offer.items);
+            const hasVariants = variantGroups.some((g) => g.name !== null);
 
-            // Header
-            doc.rect(tX, Y, tW, 18).fill('#0891b2');
-            let x = tX;
-            doc.font('Helvetica-Bold').fontSize(7).fillColor('#fff');
-            headers.forEach((h, i) => {
-                doc.text(h, x + 2, Y + 5, { width: cols[i] - 4, align: 'center' });
-                x += cols[i];
-            });
-            Y += 18;
+            for (const group of variantGroups) {
+                if (Y > 650) {
+                    doc.addPage();
+                    Y = 40;
+                }
 
-            // Rows
-            offer.items.forEach((item, idx) => {
-                const bg = idx % 2 === 0 ? '#fff' : '#f8fafc';
-                doc.rect(tX, Y, tW, 16).fill(bg).stroke('#e2e8f0');
+                if (hasVariants) {
+                    const label = group.name
+                        ? 'Wariant: ' + txt(group.name)
+                        : 'Pozycje wspolne';
 
-                const d = Number(item.discount);
-                const row = [
-                    String(idx + 1),
-                    txt(item.name).slice(0, 28),
-                    String(Number(item.quantity)),
-                    item.unit,
-                    money(item.unitPrice, ''),
-                    Number(item.vatRate) + '%',
-                    d > 0 ? d + '%' : '-',
-                    money(item.totalNet, '')
-                ];
+                    doc.rect(L, Y, W, 20).fill(group.name ? '#ecfeff' : '#f1f5f9');
+                    doc.font('Helvetica-Bold').fontSize(9).fillColor(group.name ? '#0891b2' : '#475569')
+                        .text(label, L + 8, Y + 5);
+                    Y += 24;
+                }
 
-                x = tX;
-                doc.font('Helvetica').fontSize(7).fillColor('#1e293b');
-                row.forEach((v, i) => {
-                    doc.text(v, x + 2, Y + 4, { width: cols[i] - 4, align: i === 1 ? 'left' : 'center' });
-                    x += cols[i];
-                });
-                Y += 16;
-            });
-            Y += 12;
+                Y = this.renderItemsTable(doc, group.items, Y, ACCENT, W, L);
 
-            // === SUMMARY ===
+                if (hasVariants) {
+                    const subX = L + W - 160;
+                    Y += 4;
+                    doc.font('Helvetica').fontSize(8).fillColor('#64748b')
+                        .text('Netto sekcji:', subX, Y);
+                    doc.font('Helvetica-Bold').fontSize(8).fillColor('#1e293b')
+                        .text(money(group.totalNet, offer.currency), subX + 70, Y, { width: 90, align: 'right' });
+                    Y += 12;
+                    doc.font('Helvetica').fontSize(8).fillColor('#64748b')
+                        .text('Brutto sekcji:', subX, Y);
+                    doc.font('Helvetica-Bold').fontSize(8).fillColor('#1e293b')
+                        .text(money(group.totalGross, offer.currency), subX + 70, Y, { width: 90, align: 'right' });
+                    Y += 16;
+                }
+
+                Y += 8;
+            }
+
+            Y += 4;
+
             const sumX = L + W - 180;
             doc.font('Helvetica').fontSize(9).fillColor('#1e293b').text('Netto:', sumX, Y);
             doc.font('Helvetica-Bold').text(money(offer.totalNet, offer.currency), sumX + 60, Y, { width: 120, align: 'right' });
@@ -268,27 +365,31 @@ export class PDFService {
             doc.font('Helvetica-Bold').text(money(offer.totalVat, offer.currency), sumX + 60, Y, { width: 120, align: 'right' });
             Y += 18;
 
-            doc.rect(sumX, Y, 180, 22).fill('#0891b2');
+            doc.rect(sumX, Y, 180, 22).fill(ACCENT);
             doc.font('Helvetica-Bold').fontSize(10).fillColor('#fff').text('BRUTTO:', sumX + 8, Y + 6);
             doc.text(money(offer.totalGross, offer.currency), sumX + 60, Y + 6, { width: 112, align: 'right' });
             Y += 35;
 
-            // === TERMS ===
+            if (hasVariants) {
+                doc.font('Helvetica').fontSize(7).fillColor('#94a3b8')
+                    .text(txt('* Kwota brutto dotyczy pozycji wspolnych + pierwszego wariantu'), L, Y);
+                Y += 15;
+            }
+
             if (offer.terms) {
+                if (Y > 680) { doc.addPage(); Y = 40; }
                 doc.font('Helvetica-Bold').fontSize(9).fillColor('#1e293b').text('Warunki:', L, Y);
                 Y += 12;
                 doc.font('Helvetica').fontSize(8).fillColor('#64748b').text(txt(offer.terms), L, Y, { width: W });
                 Y += 25;
             }
 
-            // === SIGNATURE ===
             doc.moveTo(380, Y + 20).lineTo(555, Y + 20).stroke('#cbd5e1');
             doc.font('Helvetica').fontSize(7).fillColor('#94a3b8').text('Podpis i pieczec', 380, Y + 24, { width: 175, align: 'center' });
 
             const targetY = 720;
             if (Y < targetY) Y = targetY;
 
-            // === FOOTER ===
             doc.moveTo(L, Y + 20).lineTo(L + W, Y + 20).stroke('#e2e8f0');
             doc.font('Helvetica').fontSize(7).fillColor('#94a3b8')
                 .text('Wygenerowano w SmartQuote AI | ' + date(new Date()), L, Y + 25, { width: W, align: 'center' });
@@ -314,9 +415,9 @@ export class PDFService {
             const W = 515;
             const L = 40;
             let Y = 40;
+            const ACCENT = '#059669';
 
-            // === HEADER ===
-            doc.rect(0, 0, 595, 45).fill('#059669'); // Zielony dla umów
+            doc.rect(0, 0, 595, 45).fill(ACCENT);
             doc.font('Helvetica-Bold').fontSize(18).fillColor('#fff').text('SmartQuote', L, 14);
 
             const company = txt(contract.user.company || contract.user.name || '');
@@ -326,59 +427,53 @@ export class PDFService {
 
             Y = 55;
 
-            // === TITLE ===
             doc.font('Helvetica-Bold').fontSize(16).fillColor('#1e293b').text('UMOWA', L, Y);
-            doc.font('Helvetica').fontSize(10).fillColor('#059669').text('Nr: ' + contract.number, L + 80, Y + 2);
+            doc.font('Helvetica').fontSize(10).fillColor(ACCENT).text('Nr: ' + contract.number, L + 80, Y + 2);
             Y += 28;
 
-            // === PARTIES ===
             const boxW = 248;
             const boxH = 80;
 
-            // Seller / Wykonawca
             doc.rect(L, Y, boxW, boxH).fill('#f1f5f9');
-            doc.rect(L, Y, boxW, 16).fill('#059669');
+            doc.rect(L, Y, boxW, 16).fill(ACCENT);
             doc.font('Helvetica-Bold').fontSize(8).fillColor('#fff').text('WYKONAWCA', L + 8, Y + 4);
             doc.font('Helvetica-Bold').fontSize(9).fillColor('#1e293b').text(company, L + 8, Y + 22);
             doc.font('Helvetica').fontSize(8);
-            let sY = Y + 34;
-            if (contract.user.email) { doc.text(contract.user.email, L + 8, sY); sY += 10; }
-            if (contract.user.phone) { doc.text(contract.user.phone, L + 8, sY); }
+            let csY = Y + 34;
+            if (contract.user.email) { doc.text(contract.user.email, L + 8, csY); csY += 10; }
+            if (contract.user.phone) { doc.text(contract.user.phone, L + 8, csY); }
 
-            // Buyer / Zleceniodawca
-            const bX = L + boxW + 19;
-            doc.rect(bX, Y, boxW, boxH).fill('#f1f5f9');
-            doc.rect(bX, Y, boxW, 16).fill('#059669');
-            doc.font('Helvetica-Bold').fontSize(8).fillColor('#fff').text('ZLECENIODAWCA', bX + 8, Y + 4);
+            const cbX = L + boxW + 19;
+            doc.rect(cbX, Y, boxW, boxH).fill('#f1f5f9');
+            doc.rect(cbX, Y, boxW, 16).fill(ACCENT);
+            doc.font('Helvetica-Bold').fontSize(8).fillColor('#fff').text('ZLECENIODAWCA', cbX + 8, Y + 4);
 
-            const client = txt(contract.client.type === 'COMPANY' ? (contract.client.company || contract.client.name) : contract.client.name);
-            doc.font('Helvetica-Bold').fontSize(9).fillColor('#1e293b').text(client, bX + 8, Y + 22);
+            const cclient = txt(contract.client.type === 'COMPANY' ? (contract.client.company || contract.client.name) : contract.client.name);
+            doc.font('Helvetica-Bold').fontSize(9).fillColor('#1e293b').text(cclient, cbX + 8, Y + 22);
             doc.font('Helvetica').fontSize(8);
-            let cY = Y + 34;
-            if (contract.client.nip) { doc.text('NIP: ' + contract.client.nip, bX + 8, cY); cY += 10; }
-            if (contract.client.address) { doc.text(txt(contract.client.address), bX + 8, cY); cY += 10; }
-            if (contract.client.city) { doc.text(txt((contract.client.postalCode || '') + ' ' + (contract.client.city || '')), bX + 8, cY); cY += 10; }
-            if (contract.client.email) { doc.text(contract.client.email, bX + 8, cY); }
+            let ccY = Y + 34;
+            if (contract.client.nip) { doc.text('NIP: ' + contract.client.nip, cbX + 8, ccY); ccY += 10; }
+            if (contract.client.address) { doc.text(txt(contract.client.address), cbX + 8, ccY); ccY += 10; }
+            if (contract.client.city) { doc.text(txt((contract.client.postalCode || '') + ' ' + (contract.client.city || '')), cbX + 8, ccY); ccY += 10; }
+            if (contract.client.email) { doc.text(contract.client.email, cbX + 8, ccY); }
 
             Y += boxH + 10;
 
-            // === INFO BAR ===
             doc.rect(L, Y, W, 26).fill('#f1f5f9');
-            const infos = [
+            const cinfos = [
                 ['Data zawarcia', date(contract.createdAt)],
                 ['Obowiazuje od', date(contract.startDate)],
                 ['Obowiazuje do', date(contract.endDate)],
                 ['Status', contractStatusMap[contract.status] || contract.status]
             ];
-            const iW = W / 4;
-            infos.forEach(([lbl, val], i) => {
-                const x = L + i * iW + 6;
+            const ciW = W / 4;
+            cinfos.forEach(([lbl, val], i) => {
+                const x = L + i * ciW + 6;
                 doc.font('Helvetica').fontSize(7).fillColor('#64748b').text(lbl, x, Y + 4);
                 doc.font('Helvetica-Bold').fontSize(9).fillColor('#1e293b').text(val, x, Y + 13);
             });
             Y += 32;
 
-            // === CONTRACT TITLE & DESC ===
             if (contract.title) {
                 doc.font('Helvetica-Bold').fontSize(11).fillColor('#1e293b').text(txt(contract.title), L, Y);
                 Y += 15;
@@ -388,74 +483,33 @@ export class PDFService {
                 Y += 15;
             }
 
-            // === TABLE ===
-            const cols = [22, 175, 40, 30, 58, 35, 35, 70];
-            const headers = ['Lp', 'Nazwa', 'Ilosc', 'Jm', 'Cena', 'VAT', 'Rabat', 'Netto'];
-            const tW = cols.reduce((a, b) => a + b, 0);
-            const tX = L + (W - tW) / 2;
-
-            // Header
-            doc.rect(tX, Y, tW, 18).fill('#059669');
-            let x = tX;
-            doc.font('Helvetica-Bold').fontSize(7).fillColor('#fff');
-            headers.forEach((h, i) => {
-                doc.text(h, x + 2, Y + 5, { width: cols[i] - 4, align: 'center' });
-                x += cols[i];
-            });
-            Y += 18;
-
-            // Rows
-            contract.items.forEach((item, idx) => {
-                const bg = idx % 2 === 0 ? '#fff' : '#f8fafc';
-                doc.rect(tX, Y, tW, 16).fill(bg).stroke('#e2e8f0');
-
-                const d = Number(item.discount);
-                const row = [
-                    String(idx + 1),
-                    txt(item.name).slice(0, 28),
-                    String(Number(item.quantity)),
-                    item.unit,
-                    money(item.unitPrice, ''),
-                    Number(item.vatRate) + '%',
-                    d > 0 ? d + '%' : '-',
-                    money(item.totalNet, '')
-                ];
-
-                x = tX;
-                doc.font('Helvetica').fontSize(7).fillColor('#1e293b');
-                row.forEach((v, i) => {
-                    doc.text(v, x + 2, Y + 4, { width: cols[i] - 4, align: i === 1 ? 'left' : 'center' });
-                    x += cols[i];
-                });
-                Y += 16;
-            });
+            Y = this.renderItemsTable(doc, contract.items, Y, ACCENT, W, L);
             Y += 12;
 
-            // === SUMMARY ===
-            const sumX = L + W - 180;
-            doc.font('Helvetica').fontSize(9).fillColor('#1e293b').text('Netto:', sumX, Y);
-            doc.font('Helvetica-Bold').text(money(contract.totalNet, contract.currency), sumX + 60, Y, { width: 120, align: 'right' });
+            const csumX = L + W - 180;
+            doc.font('Helvetica').fontSize(9).fillColor('#1e293b').text('Netto:', csumX, Y);
+            doc.font('Helvetica-Bold').text(money(contract.totalNet, contract.currency), csumX + 60, Y, { width: 120, align: 'right' });
             Y += 14;
 
-            doc.font('Helvetica').text('VAT:', sumX, Y);
-            doc.font('Helvetica-Bold').text(money(contract.totalVat, contract.currency), sumX + 60, Y, { width: 120, align: 'right' });
+            doc.font('Helvetica').text('VAT:', csumX, Y);
+            doc.font('Helvetica-Bold').text(money(contract.totalVat, contract.currency), csumX + 60, Y, { width: 120, align: 'right' });
             Y += 18;
 
-            doc.rect(sumX, Y, 180, 22).fill('#059669');
-            doc.font('Helvetica-Bold').fontSize(10).fillColor('#fff').text('BRUTTO:', sumX + 8, Y + 6);
-            doc.text(money(contract.totalGross, contract.currency), sumX + 60, Y + 6, { width: 112, align: 'right' });
+            doc.rect(csumX, Y, 180, 22).fill(ACCENT);
+            doc.font('Helvetica-Bold').fontSize(10).fillColor('#fff').text('BRUTTO:', csumX + 8, Y + 6);
+            doc.text(money(contract.totalGross, contract.currency), csumX + 60, Y + 6, { width: 112, align: 'right' });
             Y += 35;
 
-            // === TERMS ===
             if (contract.terms) {
+                if (Y > 680) { doc.addPage(); Y = 40; }
                 doc.font('Helvetica-Bold').fontSize(9).fillColor('#1e293b').text('Warunki umowy:', L, Y);
                 Y += 12;
                 doc.font('Helvetica').fontSize(8).fillColor('#64748b').text(txt(contract.terms), L, Y, { width: W });
                 Y += 25;
             }
 
-            // === PAYMENT TERMS ===
             if (contract.paymentTerms) {
+                if (Y > 680) { doc.addPage(); Y = 40; }
                 doc.font('Helvetica-Bold').fontSize(9).fillColor('#1e293b').text('Warunki platnosci:', L, Y);
                 Y += 12;
                 doc.font('Helvetica').fontSize(8).fillColor('#64748b').text(txt(contract.paymentTerms), L, Y, { width: W });
@@ -465,18 +519,15 @@ export class PDFService {
             doc.font('Helvetica').fontSize(8).fillColor('#64748b').text('Termin platnosci: ' + contract.paymentDays + ' dni', L, Y);
             Y += 20;
 
-            // === SIGNATURES ===
             doc.moveTo(L, Y + 20).lineTo(L + 175, Y + 20).stroke('#cbd5e1');
             doc.font('Helvetica').fontSize(7).fillColor('#94a3b8').text('Podpis Wykonawcy', L, Y + 24, { width: 175, align: 'center' });
 
             doc.moveTo(380, Y + 20).lineTo(555, Y + 20).stroke('#cbd5e1');
             doc.font('Helvetica').fontSize(7).fillColor('#94a3b8').text('Podpis Zleceniodawcy', 380, Y + 24, { width: 175, align: 'center' });
 
-            // Dopychamy Y na dół, ale zostawiamy miejsce na stopkę
-            const targetY = 720;
-            if (Y < targetY) Y = targetY;
+            const ctargetY = 720;
+            if (Y < ctargetY) Y = ctargetY;
 
-            // === FOOTER ===
             doc.moveTo(L, Y + 20).lineTo(L + W, Y + 20).stroke('#e2e8f0');
             doc.font('Helvetica').fontSize(7).fillColor('#94a3b8')
                 .text('Wygenerowano w SmartQuote AI | ' + date(new Date()), L, Y + 25, { width: W, align: 'center' });

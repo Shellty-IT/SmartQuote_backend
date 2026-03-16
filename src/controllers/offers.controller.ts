@@ -38,7 +38,7 @@ export class OffersController {
         try {
             const { offers, total, page, limit } = await offersService.findAll(
                 req.user!.id,
-                req.query as any
+                req.query as Record<string, string | undefined>
             );
             return paginatedResponse(res, offers, total, page, limit);
         } catch (error: unknown) {
@@ -231,20 +231,16 @@ export class OffersController {
             console.error('[Offers] SendToClient error:', error);
 
             if (error instanceof Error) {
-                if (error.message === 'OFFER_NOT_FOUND') {
-                    return errorResponse(res, 'NOT_FOUND', 'Oferta nie znaleziona', 404);
-                }
-                if (error.message === 'CLIENT_NO_EMAIL') {
-                    return errorResponse(res, 'CLIENT_NO_EMAIL', 'Klient nie ma podanego adresu email', 400);
-                }
-                if (error.message === 'SMTP_NOT_CONFIGURED') {
-                    return errorResponse(res, 'SMTP_NOT_CONFIGURED', 'Skonfiguruj skrzynkę pocztową w ustawieniach, aby wysyłać maile', 400);
-                }
-                if (error.message === 'PUBLISH_FAILED') {
-                    return errorResponse(res, 'PUBLISH_FAILED', 'Nie udało się opublikować oferty', 500);
-                }
-                if (error.message === 'EMAIL_SEND_FAILED') {
-                    return errorResponse(res, 'EMAIL_SEND_FAILED', 'Nie udało się wysłać maila. Sprawdź konfigurację SMTP', 500);
+                const errorMap: Record<string, { code: string; message: string; status: number }> = {
+                    OFFER_NOT_FOUND: { code: 'NOT_FOUND', message: 'Oferta nie znaleziona', status: 404 },
+                    CLIENT_NO_EMAIL: { code: 'CLIENT_NO_EMAIL', message: 'Klient nie ma podanego adresu email', status: 400 },
+                    SMTP_NOT_CONFIGURED: { code: 'SMTP_NOT_CONFIGURED', message: 'Skonfiguruj skrzynkę pocztową w ustawieniach, aby wysyłać maile', status: 400 },
+                    PUBLISH_FAILED: { code: 'PUBLISH_FAILED', message: 'Nie udało się opublikować oferty', status: 500 },
+                    EMAIL_SEND_FAILED: { code: 'EMAIL_SEND_FAILED', message: 'Nie udało się wysłać maila. Sprawdź konfigurację SMTP', status: 500 },
+                };
+                const mapped = errorMap[error.message];
+                if (mapped) {
+                    return errorResponse(res, mapped.code, mapped.message, mapped.status);
                 }
             }
 

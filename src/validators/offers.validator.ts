@@ -23,6 +23,7 @@ const offerItemSchema = z.object({
     isOptional: z.boolean().optional().default(false),
     minQuantity: z.number().int().min(1).optional().default(1),
     maxQuantity: z.number().int().min(1).optional().default(100),
+    variantName: z.string().max(100).optional().nullable(),
 });
 
 const dateSchema = z.string()

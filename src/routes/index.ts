@@ -1,8 +1,8 @@
 // smartquote_backend/src/routes/index.ts
-
 import { Router } from 'express';
 import authRoutes from './auth.routes';
 import publicOfferRoutes from './publicOffer.routes';
+import publicContractRoutes from './publicContract.routes';
 import clientsRoutes from './clients.routes';
 import offersRoutes from './offers.routes';
 import contractsRoutes from './contracts.routes';
@@ -15,6 +15,7 @@ const router = Router();
 
 router.use('/auth', authRoutes);
 router.use('/public/offers', publicOfferRoutes);
+router.use('/public/contracts', publicContractRoutes);
 
 router.use('/clients', clientsRoutes);
 router.use('/offers', offersRoutes);

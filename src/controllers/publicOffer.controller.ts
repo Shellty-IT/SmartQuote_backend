@@ -4,6 +4,17 @@ import { Request, Response } from 'express';
 import { publicOfferService } from '../services/publicOffer.service';
 import { successResponse, errorResponse } from '../utils/apiResponse';
 
+const ERROR_MAP: Record<string, { message: string; status: number }> = {
+    NOT_FOUND: { message: 'Oferta nie została znaleziona', status: 404 },
+    ALREADY_DECIDED: { message: 'Oferta została już rozpatrzona', status: 409 },
+    EXPIRED: { message: 'Oferta wygasła', status: 410 },
+};
+
+function handleOfferError(res: Response, errorCode: string): Response {
+    const mapped = ERROR_MAP[errorCode] || { message: 'Nieznany błąd', status: 400 };
+    return errorResponse(res, errorCode, mapped.message, mapped.status);
+}
+
 export class PublicOfferController {
     async getOffer(req: Request<{ token: string }>, res: Response) {
         try {
@@ -42,28 +53,23 @@ export class PublicOfferController {
     async acceptOffer(req: Request<{ token: string }>, res: Response) {
         try {
             const token = req.params.token;
-            const { selectedItems, confirmationChecked } = req.body;
+            const { selectedItems, confirmationChecked, selectedVariant } = req.body;
 
             if (!confirmationChecked) {
                 return errorResponse(res, 'CONFIRMATION_REQUIRED', 'Wymagane potwierdzenie akceptacji', 400);
             }
 
-            const result = await publicOfferService.acceptOffer(token, selectedItems || []);
+            const result = await publicOfferService.acceptOffer(token, selectedItems || [], selectedVariant);
 
-            if ('error' in result) {
-                if (result.error === 'NOT_FOUND') {
-                    return errorResponse(res, 'NOT_FOUND', 'Oferta nie została znaleziona', 404);
-                }
-                if (result.error === 'ALREADY_DECIDED') {
-                    return errorResponse(res, 'ALREADY_DECIDED', 'Oferta została już rozpatrzona', 409);
-                }
-                if (result.error === 'EXPIRED') {
-                    return errorResponse(res, 'EXPIRED', 'Oferta wygasła', 410);
-                }
-                return errorResponse(res, 'UNKNOWN_ERROR', 'Nieznany błąd', 400);
+            if ('error' in result && result.error) {
+                return handleOfferError(res, result.error);
             }
 
-            return successResponse(res, result.data);
+            if ('data' in result) {
+                return successResponse(res, result.data);
+            }
+
+            return errorResponse(res, 'UNKNOWN_ERROR', 'Nieznany błąd', 400);
         } catch (error) {
             console.error('[PublicOffer] AcceptOffer error:', error);
             return errorResponse(res, 'INTERNAL_ERROR', 'Błąd serwera', 500);
@@ -77,20 +83,15 @@ export class PublicOfferController {
 
             const result = await publicOfferService.rejectOffer(token, reason);
 
-            if ('error' in result) {
-                if (result.error === 'NOT_FOUND') {
-                    return errorResponse(res, 'NOT_FOUND', 'Oferta nie została znaleziona', 404);
-                }
-                if (result.error === 'ALREADY_DECIDED') {
-                    return errorResponse(res, 'ALREADY_DECIDED', 'Oferta została już rozpatrzona', 409);
-                }
-                if (result.error === 'EXPIRED') {
-                    return errorResponse(res, 'EXPIRED', 'Oferta wygasła', 410);
-                }
-                return errorResponse(res, 'UNKNOWN_ERROR', 'Nieznany błąd', 400);
+            if ('error' in result && result.error) {
+                return handleOfferError(res, result.error);
             }
 
-            return successResponse(res, result.data);
+            if ('data' in result) {
+                return successResponse(res, result.data);
+            }
+
+            return errorResponse(res, 'UNKNOWN_ERROR', 'Nieznany błąd', 400);
         } catch (error) {
             console.error('[PublicOffer] RejectOffer error:', error);
             return errorResponse(res, 'INTERNAL_ERROR', 'Błąd serwera', 500);
@@ -118,9 +119,9 @@ export class PublicOfferController {
     async trackSelection(req: Request<{ token: string }>, res: Response) {
         try {
             const token = req.params.token;
-            const { items } = req.body;
+            const { items, selectedVariant } = req.body;
 
-            await publicOfferService.trackSelection(token, items);
+            await publicOfferService.trackSelection(token, items, selectedVariant);
 
             return successResponse(res, { tracked: true });
         } catch (error) {

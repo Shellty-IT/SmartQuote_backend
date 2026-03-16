@@ -23,6 +23,7 @@ export const acceptPublicOfferSchema = z.object({
             .literal(true, {
                 errorMap: () => ({ message: 'Potwierdzenie akceptacji jest wymagane' }),
             }),
+        selectedVariant: z.string().max(100).optional().nullable(),
         selectedItems: z
             .array(
                 z.object({
@@ -76,5 +77,6 @@ export const selectionPublicOfferSchema = z.object({
                 })
             )
             .min(1, 'Lista pozycji jest wymagana'),
+        selectedVariant: z.string().max(100).optional().nullable(),
     }),
 });

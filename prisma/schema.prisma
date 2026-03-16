@@ -217,6 +217,8 @@ model OfferItem {
   minQuantity Int      @default(1)
   maxQuantity Int      @default(100)
 
+  variantName String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -225,6 +227,7 @@ model OfferItem {
 
   @@index([offerId])
   @@index([offerId, name])
+  @@index([offerId, variantName])
   @@index([name])
   @@map("offer_items")
 }
@@ -327,6 +330,9 @@ model Contract {
 
   notes String?
 
+  publicToken  String?  @unique
+  sentAt       DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -346,6 +352,7 @@ model Contract {
   @@index([offerId])
   @@index([status])
   @@index([createdAt])
+  @@index([publicToken])
   @@map("contracts")
 }
 
@@ -467,6 +474,7 @@ enum InteractionType {
   REJECT
   COMMENT
   PDF_DOWNLOAD
+  VARIANT_SWITCH
 }
 
 enum CommentAuthor {

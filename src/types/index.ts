@@ -81,6 +81,7 @@ export interface OfferItemInput {
     isOptional?: boolean;
     minQuantity?: number;
     maxQuantity?: number;
+    variantName?: string;
 }
 
 export interface CreateOfferInput {
@@ -107,6 +108,7 @@ export interface UpdateOfferInput {
 
 export interface PublicOfferAcceptInput {
     confirmationChecked: boolean;
+    selectedVariant?: string;
     selectedItems: Array<{
         id: string;
         isSelected: boolean;
@@ -245,24 +247,24 @@ export interface AIStats {
 
 export interface AIContext {
     userId: string;
-    clients?: any[];
-    offers?: any[];
-    contracts?: any[];
-    followUps?: any[];
+    clients?: Record<string, unknown>[];
+    offers?: Record<string, unknown>[];
+    contracts?: Record<string, unknown>[];
+    followUps?: Record<string, unknown>[];
     stats?: AIStats;
 }
 
 export interface AIAction {
     type: 'create_offer' | 'create_followup' | 'send_email' | 'view_client' | 'view_offer' | 'navigate';
     label: string;
-    payload: any;
+    payload: Record<string, unknown>;
 }
 
 export interface AIResponse {
     message: string;
     suggestions?: string[];
     actions?: AIAction[];
-    data?: any;
+    data?: Record<string, unknown>;
 }
 
 export interface AISuggestion {
@@ -292,7 +294,7 @@ export interface GeneratedOffer {
 
 export interface ClientAnalysis {
     score: number;
-    potential: 'wysoki' | 'średni' | 'niski';
+    potential: 'wysoki' | 'sredni' | 'niski';
     summary: string;
     recommendations: string[];
     nextAction: string;
