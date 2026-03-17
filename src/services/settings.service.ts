@@ -298,6 +298,7 @@ export async function updateCompanyInfo(
         bankName?: string;
         bankAccount?: string;
         logo?: string;
+        primaryColor?: string;
         defaultPaymentDays?: number;
         defaultTerms?: string;
         defaultNotes?: string;

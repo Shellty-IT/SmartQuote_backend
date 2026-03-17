@@ -1,4 +1,5 @@
 "use strict";
+// smartquote_backend/src/services/ai.service.ts
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -37,7 +38,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.aiService = void 0;
-// smartquote_backend/src/services/ai.service.ts
 const genai_1 = require("@google/genai");
 const config_1 = require("../config");
 const prisma_1 = __importDefault(require("../lib/prisma"));
@@ -180,7 +180,7 @@ OSTATNI KLIENCI (do 10):
 ${context.clients?.slice(0, 10).map(c => `- ${c.name}${c.company ? ` (${c.company})` : ''} - ${c.type === 'PERSON' ? 'Osoba' : 'Firma'}`).join('\n') || 'Brak klientów'}
 
 OSTATNIE OFERTY (do 5):
-${context.offers?.slice(0, 5).map(o => `- ${o.number}: ${o.title} - ${offerStatusLabels[o.status] || o.status} - ${o.totalGross} PLN dla ${o.client?.name || o.client?.company}`).join('\n') || 'Brak ofert'}
+${context.offers?.slice(0, 5).map(o => `- ${o.number}: ${o.title} - ${offerStatusLabels[o.status] || o.status} - ${o.totalGross} PLN dla ${o.client?.name || o.client?.company || 'Nieznany'}`).join('\n') || 'Brak ofert'}
 
 ZALEGŁE FOLLOW-UPY:
 ${context.followUps?.filter(f => f.status === 'PENDING').slice(0, 5).map(f => `- ${f.title} (${followUpTypeLabels[f.type] || f.type}) - priorytet: ${priorityLabels[f.priority] || f.priority} - termin: ${new Date(f.dueDate).toLocaleDateString('pl-PL')}`).join('\n') || 'Brak zaległych follow-upów'}
@@ -449,7 +449,7 @@ Zwróć TYLKO JSON (bez żadnego dodatkowego tekstu, bez markdown) w formacie:
         else {
             result = {
                 score: 5,
-                potential: 'średni',
+                potential: 'sredni',
                 summary: responseText,
                 recommendations: [],
                 nextAction: 'Skontaktuj się z klientem',
@@ -632,7 +632,7 @@ Zwróć TYLKO JSON (bez markdown):
         const legacySummary = legacyInsights.length > 0
             ? legacyInsights.map(l => {
                 const ins = l.insights;
-                return `[${l.outcome}] ${ins.pricingInsight || 'brak wniosków cenowych'}`;
+                return `[${l.outcome}] ${typeof ins.pricingInsight === 'string' ? ins.pricingInsight : 'brak wniosków cenowych'}`;
             }).join('\n')
             : 'Brak wniosków z poprzednich ofert.';
         const prompt = `Przeanalizuj cenę usługi/produktu i zasugeruj optymalne widełki cenowe.

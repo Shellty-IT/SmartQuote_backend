@@ -1,5 +1,4 @@
 "use strict";
-// smartquote_backend/src/controllers/contracts.controller.ts
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -12,13 +11,16 @@ exports.createContract = createContract;
 exports.createContractFromOffer = createContractFromOffer;
 exports.updateContract = updateContract;
 exports.updateContractStatus = updateContractStatus;
+exports.publishContract = publishContract;
+exports.unpublishContract = unpublishContract;
 exports.deleteContract = deleteContract;
+// smartquote_backend/src/controllers/contracts.controller.ts
 require("../types");
+const crypto_1 = require("crypto");
 const contracts_service_1 = __importDefault(require("../services/contracts.service"));
 const pdf_service_1 = require("../services/pdf.service");
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const apiResponse_1 = require("../utils/apiResponse");
-// GET /api/contracts
 async function getContracts(req, res, next) {
     try {
         const userId = req.user.id;
@@ -39,7 +41,6 @@ async function getContracts(req, res, next) {
         next(error);
     }
 }
-// GET /api/contracts/stats
 async function getContractsStats(req, res, next) {
     try {
         const userId = req.user.id;
@@ -50,7 +51,6 @@ async function getContractsStats(req, res, next) {
         next(error);
     }
 }
-// GET /api/contracts/:id
 async function getContractById(req, res, next) {
     try {
         const userId = req.user.id;
@@ -65,12 +65,10 @@ async function getContractById(req, res, next) {
         next(error);
     }
 }
-// GET /api/contracts/:id/pdf
 async function generateContractPDF(req, res, next) {
     try {
         const userId = req.user.id;
         const { id } = req.params;
-        // Pobierz umowę z wszystkimi relacjami + companyInfo
         const contract = await prisma_1.default.contract.findFirst({
             where: { id, userId },
             include: {
@@ -100,7 +98,6 @@ async function generateContractPDF(req, res, next) {
         if (!contract) {
             return (0, apiResponse_1.errorResponse)(res, 'NOT_FOUND', 'Umowa nie znaleziona', 404);
         }
-        // Przekształć dane dla PDF service (dodaj company z companyInfo)
         const pdfContract = {
             ...contract,
             user: {
@@ -109,9 +106,7 @@ async function generateContractPDF(req, res, next) {
                 phone: contract.user.companyInfo?.phone || contract.user.phone,
             },
         };
-        // Generuj PDF
         const pdfBuffer = await pdf_service_1.pdfService.generateContractPDF(pdfContract);
-        // Ustaw nagłówki odpowiedzi
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="umowa-${contract.number.replace(/\//g, '-')}.pdf"`);
         res.setHeader('Content-Length', pdfBuffer.length);
@@ -121,7 +116,6 @@ async function generateContractPDF(req, res, next) {
         next(error);
     }
 }
-// POST /api/contracts
 async function createContract(req, res, next) {
     try {
         const userId = req.user.id;
@@ -132,7 +126,6 @@ async function createContract(req, res, next) {
         next(error);
     }
 }
-// POST /api/contracts/from-offer/:offerId
 async function createContractFromOffer(req, res, next) {
     try {
         const userId = req.user.id;
@@ -147,7 +140,6 @@ async function createContractFromOffer(req, res, next) {
         next(error);
     }
 }
-// PUT /api/contracts/:id
 async function updateContract(req, res, next) {
     try {
         const userId = req.user.id;
@@ -162,16 +154,17 @@ async function updateContract(req, res, next) {
         next(error);
     }
 }
-// PUT /api/contracts/:id/status
 async function updateContractStatus(req, res, next) {
     try {
         const userId = req.user.id;
         const { id } = req.params;
         const { status } = req.body;
         const updateData = { status };
-        // Jeśli status zmienia się na ACTIVE, ustaw datę podpisania
         if (status === 'ACTIVE') {
             updateData.signedAt = new Date();
+        }
+        if (status === 'PENDING_SIGNATURE') {
+            updateData.sentAt = new Date();
         }
         const contract = await contracts_service_1.default.updateContract(id, userId, updateData);
         if (!contract) {
@@ -183,7 +176,61 @@ async function updateContractStatus(req, res, next) {
         next(error);
     }
 }
-// DELETE /api/contracts/:id
+async function publishContract(req, res, next) {
+    try {
+        const userId = req.user.id;
+        const { id } = req.params;
+        const contract = await prisma_1.default.contract.findFirst({
+            where: { id, userId },
+            select: { id: true, publicToken: true },
+        });
+        if (!contract) {
+            return (0, apiResponse_1.errorResponse)(res, 'NOT_FOUND', 'Umowa nie znaleziona', 404);
+        }
+        if (contract.publicToken) {
+            const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+            return (0, apiResponse_1.successResponse)(res, {
+                publicToken: contract.publicToken,
+                publicUrl: `${frontendUrl}/contract/view/${contract.publicToken}`,
+                alreadyPublished: true,
+            });
+        }
+        const token = (0, crypto_1.randomBytes)(32).toString('hex');
+        await prisma_1.default.contract.update({
+            where: { id },
+            data: { publicToken: token },
+        });
+        const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+        return (0, apiResponse_1.successResponse)(res, {
+            publicToken: token,
+            publicUrl: `${frontendUrl}/contract/view/${token}`,
+            alreadyPublished: false,
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+}
+async function unpublishContract(req, res, next) {
+    try {
+        const userId = req.user.id;
+        const { id } = req.params;
+        const contract = await prisma_1.default.contract.findFirst({
+            where: { id, userId },
+        });
+        if (!contract) {
+            return (0, apiResponse_1.errorResponse)(res, 'NOT_FOUND', 'Umowa nie znaleziona', 404);
+        }
+        await prisma_1.default.contract.update({
+            where: { id },
+            data: { publicToken: null },
+        });
+        return (0, apiResponse_1.successResponse)(res, { unpublished: true });
+    }
+    catch (error) {
+        next(error);
+    }
+}
 async function deleteContract(req, res, next) {
     try {
         const userId = req.user.id;
@@ -207,5 +254,7 @@ exports.default = {
     createContractFromOffer,
     updateContract,
     updateContractStatus,
+    publishContract,
+    unpublishContract,
     deleteContract,
 };

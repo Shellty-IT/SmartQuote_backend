@@ -53,6 +53,20 @@ interface PDFUser {
     phone: string | null;
 }
 
+interface PDFAcceptanceLog {
+    ipAddress: string;
+    userAgent: string;
+    acceptedAt: Date;
+    contentHash: string;
+    clientName: string | null;
+    clientEmail: string | null;
+    selectedVariant: string | null;
+    totalNet: Decimal;
+    totalVat: Decimal;
+    totalGross: Decimal;
+    currency: string;
+}
+
 interface PDFOffer {
     id: string;
     number: string;
@@ -71,6 +85,7 @@ interface PDFOffer {
     client: PDFClient;
     items: PDFOfferItem[];
     user: PDFUser;
+    acceptanceLog?: PDFAcceptanceLog | null;
 }
 
 interface PDFContract {
@@ -122,6 +137,12 @@ const money = (amount: Decimal | number, cur = 'PLN'): string => {
 const date = (d: Date | string | null): string => {
     if (!d) return '-';
     return new Date(d).toLocaleDateString('pl-PL');
+};
+
+const dateTime = (d: Date | string | null): string => {
+    if (!d) return '-';
+    const dt = new Date(d);
+    return dt.toLocaleDateString('pl-PL') + ' ' + dt.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 };
 
 const statusMap: Record<string, string> = {
@@ -229,6 +250,159 @@ export class PDFService {
         });
 
         return Y;
+    }
+
+    private renderAuditTrailPage(
+        doc: PDFKit.PDFDocument,
+        offer: PDFOffer,
+        log: PDFAcceptanceLog
+    ): void {
+        doc.addPage();
+
+        const W = 515;
+        const L = 40;
+        let Y = 40;
+        const ACCENT = '#059669';
+        const ACCENT_LIGHT = '#ecfdf5';
+
+        doc.rect(0, 0, 595, 50).fill(ACCENT);
+        doc.font('Helvetica-Bold').fontSize(16).fillColor('#fff')
+            .text('CERTIFICATE OF ACCEPTANCE', L, 10);
+        doc.font('Helvetica').fontSize(9).fillColor('#d1fae5')
+            .text('Formalne potwierdzenie akceptacji oferty', L, 30);
+
+        doc.font('Helvetica').fontSize(8).fillColor('#fff')
+            .text('SmartQuote AI', 400, 10, { width: 155, align: 'right' });
+        doc.text(dateTime(log.acceptedAt), 400, 22, { width: 155, align: 'right' });
+
+        Y = 65;
+
+        doc.rect(L, Y, W, 55).fill(ACCENT_LIGHT).stroke('#a7f3d0');
+        doc.font('Helvetica-Bold').fontSize(10).fillColor('#065f46')
+            .text('Oferta zaakceptowana', L + 15, Y + 8);
+        doc.font('Helvetica').fontSize(9).fillColor('#047857')
+            .text(txt(offer.title), L + 15, Y + 22);
+        doc.font('Helvetica-Bold').fontSize(9).fillColor('#065f46')
+            .text('Nr: ' + offer.number, L + 15, Y + 36);
+        doc.font('Helvetica-Bold').fontSize(12).fillColor('#065f46')
+            .text(money(log.totalGross, log.currency), 350, Y + 18, { width: W - 350 + L - 15, align: 'right' });
+
+        Y += 70;
+
+        const colW = (W - 15) / 2;
+
+        doc.rect(L, Y, colW, 16).fill(ACCENT);
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#fff').text('AKCEPTUJACY', L + 8, Y + 4);
+
+        doc.rect(L, Y + 16, colW, 50).fill('#f8fafc').stroke('#e2e8f0');
+        doc.font('Helvetica-Bold').fontSize(9).fillColor('#1e293b')
+            .text(txt(log.clientName || '-'), L + 8, Y + 22);
+        doc.font('Helvetica').fontSize(8).fillColor('#64748b')
+            .text(log.clientEmail || '-', L + 8, Y + 34);
+
+        const rX = L + colW + 15;
+        doc.rect(rX, Y, colW, 16).fill(ACCENT);
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#fff').text('SPRZEDAWCA', rX + 8, Y + 4);
+
+        doc.rect(rX, Y + 16, colW, 50).fill('#f8fafc').stroke('#e2e8f0');
+        const seller = txt(offer.user.company || offer.user.name || '');
+        doc.font('Helvetica-Bold').fontSize(9).fillColor('#1e293b')
+            .text(seller, rX + 8, Y + 22);
+        doc.font('Helvetica').fontSize(8).fillColor('#64748b')
+            .text(offer.user.email, rX + 8, Y + 34);
+
+        Y += 80;
+
+        doc.rect(L, Y, W, 16).fill('#0f172a');
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#fff')
+            .text('SZCZEGOLY AKCEPTACJI', L + 8, Y + 4);
+        Y += 16;
+
+        const details: [string, string][] = [
+            ['Data i czas akceptacji', dateTime(log.acceptedAt)],
+            ['Kwota netto', money(log.totalNet, log.currency)],
+            ['Kwota VAT', money(log.totalVat, log.currency)],
+            ['Kwota brutto', money(log.totalGross, log.currency)],
+        ];
+
+        if (log.selectedVariant) {
+            details.push(['Wybrany wariant', txt(log.selectedVariant)]);
+        }
+
+        details.push(
+            ['Adres IP', log.ipAddress],
+            ['Klient (nabywca)', txt(offer.client.type === 'COMPANY' ? (offer.client.company || offer.client.name) : offer.client.name)],
+        );
+
+        if (offer.client.nip) {
+            details.push(['NIP nabywcy', offer.client.nip]);
+        }
+
+        details.forEach(([label, value], idx) => {
+            const bg = idx % 2 === 0 ? '#fff' : '#f8fafc';
+            doc.rect(L, Y, W, 18).fill(bg).stroke('#e2e8f0');
+            doc.font('Helvetica').fontSize(8).fillColor('#64748b')
+                .text(label, L + 8, Y + 5);
+            doc.font('Helvetica-Bold').fontSize(8).fillColor('#1e293b')
+                .text(value, L + 200, Y + 5, { width: W - 208, align: 'right' });
+            Y += 18;
+        });
+
+        Y += 10;
+
+        doc.rect(L, Y, W, 16).fill('#0f172a');
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#fff')
+            .text('USER AGENT', L + 8, Y + 4);
+        Y += 16;
+
+        doc.rect(L, Y, W, 28).fill('#f8fafc').stroke('#e2e8f0');
+        const uaTruncated = log.userAgent.length > 120
+            ? log.userAgent.slice(0, 120) + '...'
+            : log.userAgent;
+        doc.font('Courier').fontSize(6).fillColor('#64748b')
+            .text(uaTruncated, L + 8, Y + 4, { width: W - 16 });
+        Y += 32;
+
+        Y += 10;
+
+        doc.rect(L, Y, W, 16).fill('#0f172a');
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#fff')
+            .text('CONTENT HASH (SHA-256)', L + 8, Y + 4);
+        Y += 16;
+
+        doc.rect(L, Y, W, 24).fill('#0f172a').stroke('#1e293b');
+        doc.font('Courier').fontSize(7).fillColor('#34d399')
+            .text(log.contentHash, L + 8, Y + 8, { width: W - 16 });
+        Y += 28;
+
+        doc.font('Helvetica').fontSize(7).fillColor('#64748b')
+            .text(
+                'Hash SHA-256 wygenerowany z zawartosci oferty (pozycje, ceny, wariant, waluta). ' +
+                'Sluzy do weryfikacji integralnosci danych w momencie akceptacji.',
+                L, Y + 4, { width: W }
+            );
+        Y += 28;
+
+        doc.rect(L, Y, W, 45).fill(ACCENT_LIGHT).stroke('#a7f3d0');
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#065f46')
+            .text('Oswiadczenie', L + 10, Y + 6);
+        doc.font('Helvetica').fontSize(7).fillColor('#047857')
+            .text(
+                'Niniejszy certyfikat potwierdza, ze osoba wskazana powyzej zaakceptowala oferte ' +
+                'nr ' + offer.number + ' w dniu ' + dateTime(log.acceptedAt) + '. ' +
+                'Dane zostaly zarejestrowane automatycznie przez system SmartQuote AI i sa niemodyfikowalne. ' +
+                'Hash SHA-256 umozliwia weryfikacje integralnosci tresci oferty w momencie akceptacji.',
+                L + 10, Y + 18, { width: W - 20 }
+            );
+
+        Y += 55;
+
+        doc.moveTo(L, Y + 10).lineTo(L + W, Y + 10).stroke('#e2e8f0');
+        doc.font('Helvetica').fontSize(7).fillColor('#94a3b8')
+            .text(
+                'Certificate of Acceptance | SmartQuote AI | Wygenerowano: ' + dateTime(new Date()),
+                L, Y + 15, { width: W, align: 'center' }
+            );
     }
 
     generateOfferPDF(offer: PDFOffer): Promise<Buffer> {
@@ -393,6 +567,10 @@ export class PDFService {
             doc.moveTo(L, Y + 20).lineTo(L + W, Y + 20).stroke('#e2e8f0');
             doc.font('Helvetica').fontSize(7).fillColor('#94a3b8')
                 .text('Wygenerowano w SmartQuote AI | ' + date(new Date()), L, Y + 25, { width: W, align: 'center' });
+
+            if (offer.acceptanceLog) {
+                this.renderAuditTrailPage(doc, offer, offer.acceptanceLog);
+            }
 
             doc.end();
         });

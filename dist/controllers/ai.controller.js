@@ -1,4 +1,5 @@
 "use strict";
+// smartquote_backend/src/controllers/ai.controller.ts
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.latestInsights = exports.closingStrategy = exports.observerInsight = exports.priceInsight = exports.getSuggestions = exports.clearHistory = exports.analyzeClient = exports.generateEmail = exports.generateOffer = exports.chat = void 0;
 const ai_service_1 = require("../services/ai.service");

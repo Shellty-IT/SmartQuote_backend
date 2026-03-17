@@ -23,6 +23,7 @@ const offerItemSchema = zod_1.z.object({
     isOptional: zod_1.z.boolean().optional().default(false),
     minQuantity: zod_1.z.number().int().min(1).optional().default(1),
     maxQuantity: zod_1.z.number().int().min(1).optional().default(100),
+    variantName: zod_1.z.string().max(100).optional().nullable(),
 });
 const dateSchema = zod_1.z.string()
     .refine((val) => {
@@ -50,6 +51,7 @@ exports.createOfferSchema = zod_1.z.object({
         notes: zod_1.z.string().max(2000).optional().nullable(),
         terms: zod_1.z.string().max(2000).optional().nullable(),
         paymentDays: zod_1.z.number().int().min(0).max(365).optional().default(14),
+        requireAuditTrail: zod_1.z.boolean().optional().default(false),
         items: zod_1.z.array(offerItemSchema).min(1, 'Oferta musi zawierać przynajmniej jedną pozycję'),
     }),
 });
@@ -66,6 +68,7 @@ exports.updateOfferSchema = zod_1.z.object({
         notes: zod_1.z.string().max(2000).optional().nullable(),
         terms: zod_1.z.string().max(2000).optional().nullable(),
         paymentDays: zod_1.z.number().int().min(0).max(365).optional(),
+        requireAuditTrail: zod_1.z.boolean().optional(),
         items: zod_1.z.array(offerItemSchema).optional(),
     }),
 });

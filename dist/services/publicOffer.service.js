@@ -9,6 +9,9 @@ const prisma_1 = __importDefault(require("../lib/prisma"));
 const library_1 = require("@prisma/client/runtime/library");
 const ai_service_1 = require("./ai.service");
 const notification_service_1 = require("./notification.service");
+const email_service_1 = require("./email.service");
+const settings_service_1 = require("./settings.service");
+const contentHash_1 = require("../utils/contentHash");
 class PublicOfferService {
     triggerPostMortem(userId, offerId, outcome) {
         ai_service_1.aiService.generatePostMortem(userId, offerId, outcome)
@@ -17,6 +20,35 @@ class PublicOfferService {
         })
             .catch((err) => {
             console.error(`❌ Post-mortem failed for public offer ${offerId}:`, err);
+        });
+    }
+    sendAcceptanceConfirmationEmail(userId, clientEmail, data) {
+        const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+        (0, settings_service_1.getDecryptedSmtpConfig)(userId)
+            .then((smtpConfig) => {
+            if (!smtpConfig) {
+                console.log('ℹ️ No SMTP config for acceptance confirmation email');
+                return;
+            }
+            return email_service_1.emailService.sendAcceptanceConfirmation(clientEmail, {
+                offerNumber: data.offerNumber,
+                offerTitle: data.offerTitle,
+                clientName: data.clientName,
+                totalGross: data.totalGross,
+                currency: data.currency,
+                contentHash: data.contentHash,
+                acceptedAt: data.acceptedAt,
+                selectedVariant: data.selectedVariant,
+                publicUrl: `${frontendUrl}/offer/view/${data.publicToken}`,
+                sellerName: data.sellerName,
+                companyName: data.companyName,
+            }, smtpConfig);
+        })
+            .then(() => {
+            console.log(`📧 Acceptance confirmation sent to ${clientEmail}`);
+        })
+            .catch((err) => {
+            console.error('❌ Acceptance confirmation email failed:', err);
         });
     }
     async getOfferByToken(token) {
@@ -47,12 +79,22 @@ class PublicOfferService {
                                 email: true,
                                 website: true,
                                 logo: true,
+                                primaryColor: true,
                             },
                         },
                     },
                 },
                 comments: {
                     orderBy: { createdAt: 'asc' },
+                },
+                acceptanceLog: {
+                    select: {
+                        contentHash: true,
+                        acceptedAt: true,
+                        selectedVariant: true,
+                        totalGross: true,
+                        currency: true,
+                    },
                 },
             },
         });
@@ -61,9 +103,21 @@ class PublicOfferService {
         const isExpired = offer.validUntil
             ? new Date(offer.validUntil) < new Date()
             : false;
+        const variantNames = [...new Set(offer.items
+                .filter((item) => item.variantName)
+                .map((item) => item.variantName))];
         return {
             expired: isExpired,
             decided: offer.status === 'ACCEPTED' || offer.status === 'REJECTED',
+            requireAuditTrail: offer.requireAuditTrail,
+            variants: variantNames,
+            acceptanceLog: offer.acceptanceLog ? {
+                contentHash: offer.acceptanceLog.contentHash,
+                acceptedAt: offer.acceptanceLog.acceptedAt,
+                selectedVariant: offer.acceptanceLog.selectedVariant,
+                totalGross: offer.acceptanceLog.totalGross,
+                currency: offer.acceptanceLog.currency,
+            } : null,
             offer: {
                 id: offer.id,
                 number: offer.number,
@@ -98,6 +152,7 @@ class PublicOfferService {
                     isSelected: item.isSelected,
                     minQuantity: item.minQuantity,
                     maxQuantity: item.maxQuantity,
+                    variantName: item.variantName,
                 })),
                 client: {
                     name: offer.client.name,
@@ -114,6 +169,7 @@ class PublicOfferService {
                     postalCode: offer.user.companyInfo?.postalCode || null,
                     website: offer.user.companyInfo?.website || null,
                     logo: offer.user.companyInfo?.logo || null,
+                    primaryColor: offer.user.companyInfo?.primaryColor || null,
                 },
                 comments: offer.comments.map((c) => ({
                     id: c.id,
@@ -182,14 +238,22 @@ class PublicOfferService {
         }
         return true;
     }
-    async acceptOffer(token, selectedItems) {
+    async acceptOffer(options) {
+        const { token, selectedItems, selectedVariant, ipAddress, userAgent, clientName, clientEmail } = options;
         const offer = await prisma_1.default.offer.findFirst({
             where: { publicToken: token, isInteractive: true },
             include: {
                 items: { orderBy: { position: 'asc' } },
                 client: { select: { id: true, name: true, company: true, email: true } },
                 user: {
-                    select: { id: true, email: true, name: true },
+                    select: {
+                        id: true,
+                        email: true,
+                        name: true,
+                        companyInfo: {
+                            select: { name: true },
+                        },
+                    },
                 },
             },
         });
@@ -201,10 +265,14 @@ class PublicOfferService {
         if (offer.validUntil && new Date(offer.validUntil) < new Date()) {
             return { error: 'EXPIRED' };
         }
+        const hasVariants = offer.items.some((item) => item.variantName);
+        const visibleItems = hasVariants
+            ? offer.items.filter((item) => !item.variantName || item.variantName === selectedVariant)
+            : offer.items;
         let totalNet = new library_1.Decimal(0);
         let totalVat = new library_1.Decimal(0);
         let totalGross = new library_1.Decimal(0);
-        const clientSelectedData = offer.items.map((item) => {
+        const clientSelectedData = visibleItems.map((item) => {
             const selection = selectedItems.find((s) => s.id === item.id);
             const isSelected = item.isOptional
                 ? (selection?.isSelected ?? item.isSelected)
@@ -236,15 +304,24 @@ class PublicOfferService {
                 netto: itemNet.toDecimalPlaces(2).toNumber(),
                 vat: itemVat.toDecimalPlaces(2).toNumber(),
                 brutto: itemGross.toDecimalPlaces(2).toNumber(),
+                variantName: item.variantName,
             };
         });
-        await prisma_1.default.$transaction([
+        const netValue = totalNet.toDecimalPlaces(2).toNumber();
+        const vatValue = totalVat.toDecimalPlaces(2).toNumber();
+        const grossValue = totalGross.toDecimalPlaces(2).toNumber();
+        const acceptedAt = new Date();
+        let contentHash = null;
+        const transactionOps = [
             prisma_1.default.offer.update({
                 where: { id: offer.id },
                 data: {
                     status: 'ACCEPTED',
-                    acceptedAt: new Date(),
-                    clientSelectedData: clientSelectedData,
+                    acceptedAt,
+                    clientSelectedData: {
+                        selectedVariant: selectedVariant || null,
+                        items: clientSelectedData,
+                    },
                 },
             }),
             prisma_1.default.offerInteraction.create({
@@ -252,16 +329,56 @@ class PublicOfferService {
                     offerId: offer.id,
                     type: 'ACCEPT',
                     details: {
+                        selectedVariant: selectedVariant || null,
                         selectedItems: clientSelectedData,
-                        totalNet: totalNet.toDecimalPlaces(2).toNumber(),
-                        totalVat: totalVat.toDecimalPlaces(2).toNumber(),
-                        totalGross: totalGross.toDecimalPlaces(2).toNumber(),
+                        totalNet: netValue,
+                        totalVat: vatValue,
+                        totalGross: grossValue,
                     },
                 },
             }),
-        ]);
+        ];
+        if (offer.requireAuditTrail) {
+            contentHash = (0, contentHash_1.generateContentHash)({
+                offerNumber: offer.number,
+                items: clientSelectedData.map((item) => ({
+                    name: item.name,
+                    quantity: item.quantity,
+                    unitPrice: item.unitPrice,
+                    vatRate: item.vatRate,
+                    discount: item.discount,
+                    isSelected: item.isSelected,
+                    variantName: item.variantName,
+                })),
+                selectedVariant: selectedVariant || null,
+                totalNet: netValue,
+                totalVat: vatValue,
+                totalGross: grossValue,
+                currency: offer.currency,
+            });
+            transactionOps.push(prisma_1.default.offerAcceptanceLog.create({
+                data: {
+                    offerId: offer.id,
+                    ipAddress: ipAddress || 'unknown',
+                    userAgent: userAgent || 'unknown',
+                    contentHash,
+                    acceptedAt,
+                    acceptedData: {
+                        selectedVariant: selectedVariant || null,
+                        items: clientSelectedData,
+                    },
+                    clientName: clientName || offer.client.name,
+                    clientEmail: clientEmail || offer.client.email,
+                    selectedVariant: selectedVariant || null,
+                    totalNet: netValue,
+                    totalVat: vatValue,
+                    totalGross: grossValue,
+                    currency: offer.currency,
+                },
+            }));
+        }
+        await prisma_1.default.$transaction(transactionOps);
         this.triggerPostMortem(offer.user.id, offer.id, 'ACCEPTED');
-        const grossValue = totalGross.toDecimalPlaces(2).toNumber();
         notification_service_1.notificationService.offerAccepted(offer.user.id, offer.user.email, {
             offerId: offer.id,
             offerNumber: offer.number,
@@ -272,6 +389,24 @@ class PublicOfferService {
         }).catch((err) => {
             console.error('❌ Notification failed (offerAccepted):', err);
         });
+        if (offer.requireAuditTrail && contentHash) {
+            const recipientEmail = clientEmail || offer.client.email;
+            if (recipientEmail) {
+                this.sendAcceptanceConfirmationEmail(offer.user.id, recipientEmail, {
+                    offerNumber: offer.number,
+                    offerTitle: offer.title,
+                    clientName: clientName || offer.client.name,
+                    totalGross: grossValue,
+                    currency: offer.currency,
+                    contentHash,
+                    acceptedAt: acceptedAt.toISOString(),
+                    selectedVariant: selectedVariant || null,
+                    publicToken: token,
+                    sellerName: offer.user.name || offer.user.email,
+                    companyName: offer.user.companyInfo?.name || null,
+                });
+            }
+        }
         return {
             success: true,
             data: {
@@ -281,13 +416,19 @@ class PublicOfferService {
                 clientName: offer.client.name,
                 clientCompany: offer.client.company,
                 clientEmail: offer.client.email,
-                totalNet: totalNet.toDecimalPlaces(2).toNumber(),
-                totalVat: totalVat.toDecimalPlaces(2).toNumber(),
+                selectedVariant: selectedVariant || null,
+                totalNet: netValue,
+                totalVat: vatValue,
                 totalGross: grossValue,
                 selectedItems: clientSelectedData.filter((i) => i.isSelected),
                 sellerEmail: offer.user.email,
                 sellerName: offer.user.name,
                 userId: offer.user.id,
+                auditTrail: offer.requireAuditTrail ? {
+                    contentHash,
+                    ipAddress: ipAddress || 'unknown',
+                    acceptedAt: acceptedAt.toISOString(),
+                } : null,
             },
         };
     }
@@ -398,7 +539,7 @@ class PublicOfferService {
             offerNumber: offer.number,
         };
     }
-    async trackSelection(token, items) {
+    async trackSelection(token, items, selectedVariant) {
         const offer = await prisma_1.default.offer.findFirst({
             where: { publicToken: token, isInteractive: true },
             select: { id: true, validUntil: true },
@@ -412,7 +553,7 @@ class PublicOfferService {
             data: {
                 offerId: offer.id,
                 type: 'ITEM_SELECT',
-                details: { items },
+                details: { items, selectedVariant: selectedVariant || null },
             },
         });
         return true;

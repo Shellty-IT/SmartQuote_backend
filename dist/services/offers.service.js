@@ -56,6 +56,25 @@ class OffersService {
             isSelected: true,
             minQuantity: item.minQuantity || 1,
             maxQuantity: item.maxQuantity || 100,
+            variantName: item.variantName || null,
+        };
+    }
+    calculateOfferTotals(items) {
+        const baseItems = items.filter((item) => !item.variantName);
+        if (baseItems.length === items.length) {
+            return {
+                totalNet: items.reduce((sum, item) => sum.plus(item.totalNet), new library_1.Decimal(0)),
+                totalVat: items.reduce((sum, item) => sum.plus(item.totalVat), new library_1.Decimal(0)),
+                totalGross: items.reduce((sum, item) => sum.plus(item.totalGross), new library_1.Decimal(0)),
+            };
+        }
+        const variantNames = [...new Set(items.filter((i) => i.variantName).map((i) => i.variantName))];
+        const firstVariantItems = items.filter((i) => i.variantName === variantNames[0]);
+        const allDefaultItems = [...baseItems, ...firstVariantItems];
+        return {
+            totalNet: allDefaultItems.reduce((sum, item) => sum.plus(item.totalNet), new library_1.Decimal(0)),
+            totalVat: allDefaultItems.reduce((sum, item) => sum.plus(item.totalVat), new library_1.Decimal(0)),
+            totalGross: allDefaultItems.reduce((sum, item) => sum.plus(item.totalGross), new library_1.Decimal(0)),
         };
     }
     async create(userId, data) {
@@ -67,9 +86,7 @@ class OffersService {
         }
         const number = await (0, offerNumber_1.generateOfferNumber)(userId);
         const itemsWithTotals = data.items.map((item, index) => this.buildItemWithTotals(item, index));
-        const totalNet = itemsWithTotals.reduce((sum, item) => sum.plus(item.totalNet), new library_1.Decimal(0));
-        const totalVat = itemsWithTotals.reduce((sum, item) => sum.plus(item.totalVat), new library_1.Decimal(0));
-        const totalGross = itemsWithTotals.reduce((sum, item) => sum.plus(item.totalGross), new library_1.Decimal(0));
+        const offerTotals = this.calculateOfferTotals(itemsWithTotals);
         return prisma_1.default.offer.create({
             data: {
                 number,
@@ -79,9 +96,10 @@ class OffersService {
                 notes: data.notes,
                 terms: data.terms,
                 paymentDays: data.paymentDays || 14,
-                totalNet,
-                totalVat,
-                totalGross,
+                requireAuditTrail: data.requireAuditTrail || false,
+                totalNet: offerTotals.totalNet,
+                totalVat: offerTotals.totalVat,
+                totalGross: offerTotals.totalGross,
                 userId,
                 clientId: data.clientId,
                 items: {
@@ -106,6 +124,7 @@ class OffersService {
                 items: {
                     orderBy: { position: 'asc' },
                 },
+                acceptanceLog: true,
                 _count: {
                     select: { followUps: true, comments: true, views: true },
                 },
@@ -168,7 +187,7 @@ class OffersService {
             return null;
         }
         const previousStatus = existing.status;
-        let updateData = {
+        const updateData = {
             title: data.title,
             description: data.description,
             status: data.status,
@@ -177,6 +196,9 @@ class OffersService {
             terms: data.terms,
             paymentDays: data.paymentDays,
         };
+        if (data.requireAuditTrail !== undefined) {
+            updateData.requireAuditTrail = data.requireAuditTrail;
+        }
         if (data.status) {
             const now = new Date();
             switch (data.status) {
@@ -197,18 +219,16 @@ class OffersService {
         let result;
         if (data.items && data.items.length > 0) {
             const itemsWithTotals = data.items.map((item, index) => this.buildItemWithTotals(item, index));
-            const totalNet = itemsWithTotals.reduce((sum, item) => sum.plus(item.totalNet), new library_1.Decimal(0));
-            const totalVat = itemsWithTotals.reduce((sum, item) => sum.plus(item.totalVat), new library_1.Decimal(0));
-            const totalGross = itemsWithTotals.reduce((sum, item) => sum.plus(item.totalGross), new library_1.Decimal(0));
+            const offerTotals = this.calculateOfferTotals(itemsWithTotals);
             result = await prisma_1.default.$transaction(async (tx) => {
                 await tx.offerItem.deleteMany({ where: { offerId: id } });
                 return tx.offer.update({
                     where: { id },
                     data: {
                         ...updateData,
-                        totalNet,
-                        totalVat,
-                        totalGross,
+                        totalNet: offerTotals.totalNet,
+                        totalVat: offerTotals.totalVat,
+                        totalGross: offerTotals.totalGross,
                         items: {
                             create: itemsWithTotals,
                         },
@@ -295,6 +315,7 @@ class OffersService {
                 notes: original.notes,
                 terms: original.terms,
                 paymentDays: original.paymentDays,
+                requireAuditTrail: original.requireAuditTrail,
                 totalNet: original.totalNet,
                 totalVat: original.totalVat,
                 totalGross: original.totalGross,
@@ -318,6 +339,7 @@ class OffersService {
                         isSelected: true,
                         minQuantity: item.minQuantity,
                         maxQuantity: item.maxQuantity,
+                        variantName: item.variantName,
                     })),
                 },
             },

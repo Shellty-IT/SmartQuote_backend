@@ -68,19 +68,20 @@ model CompanyInfo {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  name        String?
-  nip         String?
-  regon       String?
-  address     String?
-  city        String?
-  postalCode  String?
-  country     String? @default("Polska")
-  phone       String?
-  email       String?
-  website     String?
-  bankName    String?
-  bankAccount String?
-  logo        String?
+  name         String?
+  nip          String?
+  regon        String?
+  address      String?
+  city         String?
+  postalCode   String?
+  country      String? @default("Polska")
+  phone        String?
+  email        String?
+  website      String?
+  bankName     String?
+  bankAccount  String?
+  logo         String?
+  primaryColor String?
 
   defaultPaymentDays Int     @default(14)
   defaultTerms       String?

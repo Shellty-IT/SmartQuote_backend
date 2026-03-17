@@ -22,6 +22,9 @@ exports.acceptPublicOfferSchema = zod_1.z.object({
             .literal(true, {
             errorMap: () => ({ message: 'Potwierdzenie akceptacji jest wymagane' }),
         }),
+        selectedVariant: zod_1.z.string().max(100).optional().nullable(),
+        clientName: zod_1.z.string().max(200).optional().nullable(),
+        clientEmail: zod_1.z.string().email('Nieprawidłowy adres email').max(300).optional().nullable(),
         selectedItems: zod_1.z
             .array(zod_1.z.object({
             id: zod_1.z.string().min(1, 'ID pozycji jest wymagane'),
@@ -68,5 +71,6 @@ exports.selectionPublicOfferSchema = zod_1.z.object({
             quantity: zod_1.z.number().positive('Ilość musi być większa od 0'),
         }))
             .min(1, 'Lista pozycji jest wymagana'),
+        selectedVariant: zod_1.z.string().max(100).optional().nullable(),
     }),
 });

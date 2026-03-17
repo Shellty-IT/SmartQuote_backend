@@ -110,6 +110,7 @@ export class PublicOfferService {
                                 email: true,
                                 website: true,
                                 logo: true,
+                                primaryColor: true,
                             },
                         },
                     },
@@ -204,6 +205,7 @@ export class PublicOfferService {
                     postalCode: offer.user.companyInfo?.postalCode || null,
                     website: offer.user.companyInfo?.website || null,
                     logo: offer.user.companyInfo?.logo || null,
+                    primaryColor: offer.user.companyInfo?.primaryColor || null,
                 },
                 comments: offer.comments.map((c) => ({
                     id: c.id,

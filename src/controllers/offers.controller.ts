@@ -108,6 +108,7 @@ export class OffersController {
                     items: {
                         orderBy: { position: 'asc' },
                     },
+                    acceptanceLog: true,
                     user: {
                         select: {
                             id: true,
