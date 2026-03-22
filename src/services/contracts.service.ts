@@ -57,7 +57,6 @@ function calculateItem(item: ContractItemInput) {
     };
 }
 
-// Pobieranie listy umów
 export async function getContracts(params: GetContractsParams) {
     const { userId, page = 1, limit = 10, status, clientId, search } = params;
 
@@ -104,7 +103,6 @@ export async function getContracts(params: GetContractsParams) {
     };
 }
 
-// Pobieranie jednej umowy
 export async function getContractById(id: string, userId: string) {
     const contract = await prisma.contract.findFirst({
         where: { id, userId },
@@ -112,23 +110,21 @@ export async function getContractById(id: string, userId: string) {
             client: true,
             offer: true,
             items: { orderBy: { position: 'asc' } },
+            signatureLog: true,
         },
     });
 
     return contract;
 }
 
-// Tworzenie umowy
 export async function createContract(userId: string, data: CreateContractInput) {
     const number = await generateContractNumber(userId);
 
-    // Oblicz pozycje
     const calculatedItems = data.items.map((item, index) => ({
         ...calculateItem(item),
         position: item.position ?? index,
     }));
 
-    // Oblicz sumy
     const totalNet = calculatedItems.reduce((sum, item) => sum + item.totalNet, 0);
     const totalVat = calculatedItems.reduce((sum, item) => sum + item.totalVat, 0);
     const totalGross = calculatedItems.reduce((sum, item) => sum + item.totalGross, 0);
@@ -163,7 +159,6 @@ export async function createContract(userId: string, data: CreateContractInput) 
     return contract;
 }
 
-// Aktualizacja umowy
 export async function updateContract(id: string, userId: string, data: UpdateContractInput) {
     const existing = await prisma.contract.findFirst({
         where: { id, userId },
@@ -177,7 +172,6 @@ export async function updateContract(id: string, userId: string, data: UpdateCon
     let totals = {};
 
     if (data.items) {
-        // Usuń stare pozycje i dodaj nowe
         await prisma.contractItem.deleteMany({ where: { contractId: id } });
 
         const calculatedItems = data.items.map((item, index) => ({
@@ -219,7 +213,6 @@ export async function updateContract(id: string, userId: string, data: UpdateCon
     return contract;
 }
 
-// Usuwanie umowy
 export async function deleteContract(id: string, userId: string) {
     const existing = await prisma.contract.findFirst({
         where: { id, userId },
@@ -233,7 +226,6 @@ export async function deleteContract(id: string, userId: string) {
     return true;
 }
 
-// Tworzenie umowy z oferty
 export async function createContractFromOffer(offerId: string, userId: string) {
     const offer = await prisma.offer.findFirst({
         where: { id: offerId, userId },
@@ -269,7 +261,6 @@ export async function createContractFromOffer(offerId: string, userId: string) {
     return createContract(userId, contractData);
 }
 
-// Statystyki umów
 export async function getContractsStats(userId: string) {
     const [total, byStatus, values] = await Promise.all([
         prisma.contract.count({ where: { userId } }),
