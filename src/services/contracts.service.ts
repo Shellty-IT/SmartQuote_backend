@@ -9,14 +9,12 @@ import {
     GetContractsParams
 } from '../types';
 
-// Helper do konwersji daty
 function toDate(value: Date | string | undefined | null): Date | null {
     if (!value) return null;
     if (value instanceof Date) return value;
     return new Date(value);
 }
 
-// Generowanie numeru umowy
 async function generateContractNumber(userId: string): Promise<string> {
     const year = new Date().getFullYear();
     const count = await prisma.contract.count({
@@ -32,7 +30,6 @@ async function generateContractNumber(userId: string): Promise<string> {
     return `UMW/${year}/${number}`;
 }
 
-// Obliczanie pozycji
 function calculateItem(item: ContractItemInput) {
     const quantity = Number(item.quantity);
     const unitPrice = Number(item.unitPrice);

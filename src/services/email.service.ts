@@ -1,5 +1,4 @@
 // smartquote_backend/src/services/email.service.ts
-
 import nodemailer from 'nodemailer';
 import type { SmtpConfig } from '../types';
 
@@ -50,6 +49,19 @@ interface AcceptanceConfirmationEmailData {
     readonly contentHash: string;
     readonly acceptedAt: string;
     readonly selectedVariant?: string | null;
+    readonly publicUrl: string;
+    readonly sellerName: string;
+    readonly companyName: string | null;
+}
+
+interface SignatureConfirmationEmailData {
+    readonly contractNumber: string;
+    readonly contractTitle: string;
+    readonly signerName: string;
+    readonly totalGross: number;
+    readonly currency: string;
+    readonly contentHash: string;
+    readonly signedAt: string;
     readonly publicUrl: string;
     readonly sellerName: string;
     readonly companyName: string | null;
@@ -125,6 +137,13 @@ class EmailService {
     private ctaButton(url: string, label: string): string {
         return `<table cellpadding="0" cellspacing="0" role="presentation" style="margin:24px 0;">
 <tr><td style="background:linear-gradient(135deg,#0891b2,#3b82f6);border-radius:10px;padding:14px 28px;">
+<a href="${url}" style="color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;display:inline-block;" target="_blank">${label}</a>
+</td></tr></table>`;
+    }
+
+    private ctaButtonEmerald(url: string, label: string): string {
+        return `<table cellpadding="0" cellspacing="0" role="presentation" style="margin:24px 0;">
+<tr><td style="background:linear-gradient(135deg,#059669,#0d9488);border-radius:10px;padding:14px 28px;">
 <a href="${url}" style="color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;display:inline-block;" target="_blank">${label}</a>
 </td></tr></table>`;
     }
@@ -323,6 +342,55 @@ ${data.companyName ? `<br/><span style="color:#64748b;">${data.companyName}</spa
         return this.send({
             to,
             subject: `🔐 Potwierdzenie akceptacji oferty ${data.offerNumber}`,
+            html,
+        }, smtpConfig);
+    }
+
+    async sendSignatureConfirmation(to: string, data: SignatureConfirmationEmailData, smtpConfig: SmtpConfig): Promise<boolean> {
+        const html = this.baseTemplate(`
+<div style="text-align:center;margin-bottom:24px;">
+<div style="width:56px;height:56px;background:#ecfdf5;border-radius:28px;line-height:56px;text-align:center;font-size:28px;display:inline-block;margin-bottom:12px;">✍️</div>
+<h2 style="margin:0;color:#0f172a;font-size:20px;font-weight:700;">Potwierdzenie podpisu umowy</h2>
+</div>
+<p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px;">
+Dzień dobry${data.signerName ? `, ${data.signerName}` : ''}! Potwierdzamy złożenie podpisu elektronicznego pod umową.
+</p>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">
+<tr><td style="padding:16px;">
+<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Umowa</p>
+<p style="margin:0;color:#0f172a;font-size:15px;font-weight:600;">${data.contractTitle}</p>
+<p style="margin:4px 0 0;color:#64748b;font-size:13px;">${data.contractNumber}</p>
+</td></tr>
+<tr><td style="padding:0 16px 16px;">
+<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Wartość brutto</p>
+<p style="margin:0;color:#059669;font-size:20px;font-weight:700;">${this.formatCurrency(data.totalGross, data.currency)}</p>
+</td></tr>
+<tr><td style="padding:0 16px 16px;">
+<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Data podpisu</p>
+<p style="margin:0;color:#0f172a;font-size:14px;">${this.formatDateTime(data.signedAt)}</p>
+</td></tr>
+</table>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0fdf4;border-radius:12px;border:1px solid #bbf7d0;margin-top:16px;">
+<tr><td style="padding:16px;">
+<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Cyfrowy odcisk treści (SHA-256)</p>
+<p style="margin:0;color:#166534;font-size:12px;font-family:monospace;word-break:break-all;line-height:1.6;">${data.contentHash}</p>
+</td></tr>
+</table>
+<p style="color:#64748b;font-size:12px;line-height:1.6;margin:16px 0 0;">
+Ten hash jest unikalnym odciskiem cyfrowym treści umowy w momencie podpisu.
+Każda zmiana w treści umowy spowodowałaby wygenerowanie innego hasha — co potwierdza,
+że dokument nie został zmodyfikowany po podpisaniu.
+</p>
+${this.ctaButtonEmerald(data.publicUrl, 'Zobacz umowę i pobierz PDF →')}
+<p style="color:#94a3b8;font-size:12px;margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0;">
+Pozdrawiam,<br/>
+<strong style="color:#475569;">${data.sellerName}</strong>
+${data.companyName ? `<br/><span style="color:#64748b;">${data.companyName}</span>` : ''}
+</p>`);
+
+        return this.send({
+            to,
+            subject: `✍️ Potwierdzenie podpisu umowy ${data.contractNumber}`,
             html,
         }, smtpConfig);
     }

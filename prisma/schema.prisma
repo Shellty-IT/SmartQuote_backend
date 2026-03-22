@@ -376,6 +376,7 @@ model Contract {
   offer     Offer?         @relation(fields: [offerId], references: [id], onDelete: SetNull)
   items     ContractItem[]
   followUps FollowUp[]
+  signatureLog ContractSignatureLog?
 
   @@unique([userId, number])
   @@index([userId])
@@ -409,6 +410,33 @@ model ContractItem {
 
   @@index([contractId])
   @@map("contract_items")
+}
+
+model ContractSignatureLog {
+  id          String   @id @default(cuid())
+  contractId  String   @unique
+  contract    Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  ipAddress      String
+  userAgent      String
+  signedAt       DateTime @default(now())
+  contentHash    String
+  signatureImage String
+  signedData     Json
+
+  signerName  String
+  signerEmail String
+
+  totalNet    Decimal @db.Decimal(12, 2)
+  totalVat    Decimal @db.Decimal(12, 2)
+  totalGross  Decimal @db.Decimal(12, 2)
+  currency    String  @default("PLN")
+
+  createdAt DateTime @default(now())
+
+  @@index([contractId])
+  @@index([contentHash])
+  @@map("contract_signature_logs")
 }
 
 model FollowUp {
@@ -521,5 +549,6 @@ enum NotificationType {
   OFFER_COMMENT
   AI_INSIGHT
   FOLLOW_UP_REMINDER
+  CONTRACT_SIGNED
   SYSTEM
 }

@@ -1,5 +1,4 @@
 // smartquote_backend/src/services/pdf.service.ts
-
 import PDFDocument from 'pdfkit';
 import { Decimal } from '@prisma/client/runtime/library';
 
@@ -67,6 +66,20 @@ interface PDFAcceptanceLog {
     currency: string;
 }
 
+interface PDFSignatureLog {
+    ipAddress: string;
+    userAgent: string;
+    signedAt: Date;
+    contentHash: string;
+    signatureImage: string;
+    signerName: string;
+    signerEmail: string;
+    totalNet: Decimal;
+    totalVat: Decimal;
+    totalGross: Decimal;
+    currency: string;
+}
+
 interface PDFOffer {
     id: string;
     number: string;
@@ -109,6 +122,7 @@ interface PDFContract {
     client: PDFClient;
     items: PDFContractItem[];
     user: PDFUser;
+    signatureLog?: PDFSignatureLog;
 }
 
 interface VariantGroup {
@@ -401,6 +415,171 @@ export class PDFService {
         doc.font('Helvetica').fontSize(7).fillColor('#94a3b8')
             .text(
                 'Certificate of Acceptance | SmartQuote AI | Wygenerowano: ' + dateTime(new Date()),
+                L, Y + 15, { width: W, align: 'center' }
+            );
+    }
+
+    private renderContractSignaturePage(
+        doc: PDFKit.PDFDocument,
+        contract: PDFContract,
+        log: PDFSignatureLog
+    ): void {
+        doc.addPage();
+
+        const W = 515;
+        const L = 40;
+        let Y = 40;
+        const ACCENT = '#059669';
+        const ACCENT_LIGHT = '#ecfdf5';
+
+        doc.rect(0, 0, 595, 50).fill(ACCENT);
+        doc.font('Helvetica-Bold').fontSize(16).fillColor('#fff')
+            .text('CERTIFICATE OF SIGNATURE', L, 10);
+        doc.font('Helvetica').fontSize(9).fillColor('#d1fae5')
+            .text('Formalne potwierdzenie podpisu umowy', L, 30);
+
+        doc.font('Helvetica').fontSize(8).fillColor('#fff')
+            .text('SmartQuote AI', 400, 10, { width: 155, align: 'right' });
+        doc.text(dateTime(log.signedAt), 400, 22, { width: 155, align: 'right' });
+
+        Y = 65;
+
+        doc.rect(L, Y, W, 55).fill(ACCENT_LIGHT).stroke('#a7f3d0');
+        doc.font('Helvetica-Bold').fontSize(10).fillColor('#065f46')
+            .text('Umowa podpisana', L + 15, Y + 8);
+        doc.font('Helvetica').fontSize(9).fillColor('#047857')
+            .text(txt(contract.title), L + 15, Y + 22);
+        doc.font('Helvetica-Bold').fontSize(9).fillColor('#065f46')
+            .text('Nr: ' + contract.number, L + 15, Y + 36);
+        doc.font('Helvetica-Bold').fontSize(12).fillColor('#065f46')
+            .text(money(log.totalGross, log.currency), 350, Y + 18, { width: W - 350 + L - 15, align: 'right' });
+
+        Y += 70;
+
+        const colW = (W - 15) / 2;
+
+        doc.rect(L, Y, colW, 16).fill(ACCENT);
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#fff').text('PODPISUJACY', L + 8, Y + 4);
+
+        doc.rect(L, Y + 16, colW, 50).fill('#f8fafc').stroke('#e2e8f0');
+        doc.font('Helvetica-Bold').fontSize(9).fillColor('#1e293b')
+            .text(txt(log.signerName), L + 8, Y + 22);
+        doc.font('Helvetica').fontSize(8).fillColor('#64748b')
+            .text(log.signerEmail, L + 8, Y + 34);
+
+        const rX = L + colW + 15;
+        doc.rect(rX, Y, colW, 16).fill(ACCENT);
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#fff').text('WYKONAWCA', rX + 8, Y + 4);
+
+        doc.rect(rX, Y + 16, colW, 50).fill('#f8fafc').stroke('#e2e8f0');
+        const seller = txt(contract.user.company || contract.user.name || '');
+        doc.font('Helvetica-Bold').fontSize(9).fillColor('#1e293b')
+            .text(seller, rX + 8, Y + 22);
+        doc.font('Helvetica').fontSize(8).fillColor('#64748b')
+            .text(contract.user.email, rX + 8, Y + 34);
+
+        Y += 80;
+
+        doc.rect(L, Y, W, 16).fill('#0f172a');
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#fff')
+            .text('PODPIS ELEKTRONICZNY', L + 8, Y + 4);
+        Y += 16;
+
+        doc.rect(L, Y, W, 90).fill('#fff').stroke('#e2e8f0');
+
+        try {
+            const base64Data = log.signatureImage.replace(/^data:image\/\w+;base64,/, '');
+            const imgBuffer = Buffer.from(base64Data, 'base64');
+            const imgX = L + (W - 250) / 2;
+            doc.image(imgBuffer, imgX, Y + 5, { width: 250, height: 80, fit: [250, 80], align: 'center', valign: 'center' });
+        } catch {
+            doc.font('Helvetica').fontSize(9).fillColor('#94a3b8')
+                .text('[Podpis niedostepny]', L + 8, Y + 35, { width: W - 16, align: 'center' });
+        }
+
+        Y += 94;
+
+        doc.rect(L, Y, W, 16).fill('#0f172a');
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#fff')
+            .text('SZCZEGOLY PODPISU', L + 8, Y + 4);
+        Y += 16;
+
+        const details: [string, string][] = [
+            ['Data i czas podpisu', dateTime(log.signedAt)],
+            ['Kwota netto', money(log.totalNet, log.currency)],
+            ['Kwota VAT', money(log.totalVat, log.currency)],
+            ['Kwota brutto', money(log.totalGross, log.currency)],
+            ['Adres IP', log.ipAddress],
+            ['Zleceniodawca', txt(contract.client.type === 'COMPANY' ? (contract.client.company || contract.client.name) : contract.client.name)],
+        ];
+
+        if (contract.client.nip) {
+            details.push(['NIP zleceniodawcy', contract.client.nip]);
+        }
+
+        details.forEach(([label, value], idx) => {
+            const bg = idx % 2 === 0 ? '#fff' : '#f8fafc';
+            doc.rect(L, Y, W, 18).fill(bg).stroke('#e2e8f0');
+            doc.font('Helvetica').fontSize(8).fillColor('#64748b')
+                .text(label, L + 8, Y + 5);
+            doc.font('Helvetica-Bold').fontSize(8).fillColor('#1e293b')
+                .text(value, L + 200, Y + 5, { width: W - 208, align: 'right' });
+            Y += 18;
+        });
+
+        Y += 10;
+
+        doc.rect(L, Y, W, 16).fill('#0f172a');
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#fff')
+            .text('USER AGENT', L + 8, Y + 4);
+        Y += 16;
+
+        doc.rect(L, Y, W, 28).fill('#f8fafc').stroke('#e2e8f0');
+        const uaTruncated = log.userAgent.length > 120
+            ? log.userAgent.slice(0, 120) + '...'
+            : log.userAgent;
+        doc.font('Courier').fontSize(6).fillColor('#64748b')
+            .text(uaTruncated, L + 8, Y + 4, { width: W - 16 });
+        Y += 32;
+
+        Y += 10;
+
+        doc.rect(L, Y, W, 16).fill('#0f172a');
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#fff')
+            .text('CONTENT HASH (SHA-256)', L + 8, Y + 4);
+        Y += 16;
+
+        doc.rect(L, Y, W, 24).fill('#0f172a').stroke('#1e293b');
+        doc.font('Courier').fontSize(7).fillColor('#34d399')
+            .text(log.contentHash, L + 8, Y + 8, { width: W - 16 });
+        Y += 28;
+
+        doc.font('Helvetica').fontSize(7).fillColor('#64748b')
+            .text(
+                'Hash SHA-256 wygenerowany z zawartosci umowy (pozycje, ceny, waluta). ' +
+                'Sluzy do weryfikacji integralnosci danych w momencie podpisu.',
+                L, Y + 4, { width: W }
+            );
+        Y += 28;
+
+        doc.rect(L, Y, W, 45).fill(ACCENT_LIGHT).stroke('#a7f3d0');
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#065f46')
+            .text('Oswiadczenie', L + 10, Y + 6);
+        doc.font('Helvetica').fontSize(7).fillColor('#047857')
+            .text(
+                'Niniejszy certyfikat potwierdza, ze osoba wskazana powyzej podpisala umowe ' +
+                'nr ' + contract.number + ' w dniu ' + dateTime(log.signedAt) + '. ' +
+                'Podpis elektroniczny i dane zostaly zarejestrowane automatycznie przez system SmartQuote AI i sa niemodyfikowalne. ' +
+                'Hash SHA-256 umozliwia weryfikacje integralnosci tresci umowy w momencie podpisu.',
+                L + 10, Y + 18, { width: W - 20 }
+            );
+
+        Y += 55;
+
+        doc.moveTo(L, Y + 10).lineTo(L + W, Y + 10).stroke('#e2e8f0');
+        doc.font('Helvetica').fontSize(7).fillColor('#94a3b8')
+            .text(
+                'Certificate of Signature | SmartQuote AI | Wygenerowano: ' + dateTime(new Date()),
                 L, Y + 15, { width: W, align: 'center' }
             );
     }
@@ -709,6 +888,10 @@ export class PDFService {
             doc.moveTo(L, Y + 20).lineTo(L + W, Y + 20).stroke('#e2e8f0');
             doc.font('Helvetica').fontSize(7).fillColor('#94a3b8')
                 .text('Wygenerowano w SmartQuote AI | ' + date(new Date()), L, Y + 25, { width: W, align: 'center' });
+
+            if (contract.signatureLog) {
+                this.renderContractSignaturePage(doc, contract, contract.signatureLog);
+            }
 
             doc.end();
         });
