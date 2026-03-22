@@ -43,6 +43,115 @@ const offerStatusLabels: Record<string, string> = {
     EXPIRED: 'Wygasła',
 };
 
+type VariantHistoryStats = {
+    readonly totalAcceptedOffersAnalyzed: number;
+    readonly totalAcceptedWithVariant: number;
+    readonly distribution: Array<{ variant: string; count: number; share: number }>;
+    readonly topVariant: string | null;
+    readonly topVariantShare: number | null;
+};
+
+type SelectedItemSnapshot = {
+    readonly itemId: string;
+    readonly name: string;
+    readonly isSelected: boolean;
+    readonly quantity: number;
+    readonly unitPrice: number;
+    readonly vatRate: number;
+    readonly discount: number;
+    readonly netto?: number;
+    readonly vat?: number;
+    readonly brutto?: number;
+    readonly variantName?: string | null;
+};
+
+type ClientSelectedSnapshot = {
+    readonly selectedVariant: string | null;
+    readonly items: SelectedItemSnapshot[];
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function asNonEmptyStringOrNull(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
+function asNumberOrNull(value: unknown): number | null {
+    const n = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(n) ? n : null;
+}
+
+function parseClientSelectedSnapshot(value: unknown): ClientSelectedSnapshot | null {
+    if (!isRecord(value)) return null;
+
+    const selectedVariant = value.selectedVariant === null ? null : asNonEmptyStringOrNull(value.selectedVariant);
+    const itemsValue = value.items;
+
+    if (!Array.isArray(itemsValue)) {
+        return null;
+    }
+
+    const items: SelectedItemSnapshot[] = [];
+
+    for (const rawItem of itemsValue) {
+        if (!isRecord(rawItem)) continue;
+
+        const itemId = asNonEmptyStringOrNull(rawItem.itemId);
+        const name = asNonEmptyStringOrNull(rawItem.name);
+        const isSelected = typeof rawItem.isSelected === 'boolean' ? rawItem.isSelected : null;
+        const quantity = asNumberOrNull(rawItem.quantity);
+        const unitPrice = asNumberOrNull(rawItem.unitPrice);
+        const vatRate = asNumberOrNull(rawItem.vatRate);
+        const discount = asNumberOrNull(rawItem.discount);
+
+        if (!itemId || !name || isSelected === null || quantity === null || unitPrice === null || vatRate === null || discount === null) {
+            continue;
+        }
+
+        const netto = asNumberOrNull(rawItem.netto) ?? undefined;
+        const vat = asNumberOrNull(rawItem.vat) ?? undefined;
+        const brutto = asNumberOrNull(rawItem.brutto) ?? undefined;
+
+        items.push({
+            itemId,
+            name,
+            isSelected,
+            quantity,
+            unitPrice,
+            vatRate,
+            discount,
+            netto,
+            vat,
+            brutto,
+            variantName: rawItem.variantName === null ? null : asNonEmptyStringOrNull(rawItem.variantName),
+        });
+    }
+
+    return { selectedVariant, items };
+}
+
+function inferSelectedVariantFromInteractions(interactions: Array<{ type: string; details: unknown }>): string | null | undefined {
+    for (let idx = interactions.length - 1; idx >= 0; idx -= 1) {
+        const i = interactions[idx];
+        if (!i) continue;
+
+        if (i.type !== 'ITEM_SELECT' && i.type !== 'ACCEPT') continue;
+        if (!isRecord(i.details)) continue;
+
+        const sv = i.details.selectedVariant;
+        if (sv === null) return null;
+
+        const parsed = asNonEmptyStringOrNull(sv);
+        if (parsed) return parsed;
+    }
+
+    return undefined;
+}
+
 class AIService {
     private ai: GoogleGenAI | null = null;
     private conversationHistories: Map<string, Array<{ role: string; content: string }>> = new Map();
@@ -492,6 +601,49 @@ Zwróć TYLKO JSON (bez żadnego dodatkowego tekstu, bez markdown) w formacie:
         return result;
     }
 
+    private async getVariantHistoryStats(userId: string): Promise<VariantHistoryStats | null> {
+        const acceptedOffers = await prisma.offer.findMany({
+            where: { userId, status: 'ACCEPTED' },
+            orderBy: { acceptedAt: 'desc' },
+            take: 50,
+            select: { clientSelectedData: true },
+        });
+
+        const counts: Record<string, number> = {};
+        let totalWithVariant = 0;
+
+        for (const o of acceptedOffers) {
+            const snapshot = parseClientSelectedSnapshot(o.clientSelectedData);
+            const sv = snapshot?.selectedVariant;
+            if (!sv) continue;
+
+            totalWithVariant += 1;
+            counts[sv] = (counts[sv] || 0) + 1;
+        }
+
+        if (totalWithVariant === 0) {
+            return null;
+        }
+
+        const distribution = Object.entries(counts)
+            .map(([variant, count]) => ({
+                variant,
+                count,
+                share: Math.round((count / totalWithVariant) * 1000) / 10,
+            }))
+            .sort((a, b) => b.count - a.count);
+
+        const top = distribution[0] || null;
+
+        return {
+            totalAcceptedOffersAnalyzed: acceptedOffers.length,
+            totalAcceptedWithVariant: totalWithVariant,
+            distribution,
+            topVariant: top?.variant || null,
+            topVariantShare: top?.share ?? null,
+        };
+    }
+
     async generatePostMortem(userId: string, offerId: string, outcome: 'ACCEPTED' | 'REJECTED'): Promise<void> {
         const existing = await prisma.offerLegacyInsight.findFirst({
             where: { offerId, userId },
@@ -518,12 +670,29 @@ Zwróć TYLKO JSON (bez żadnego dodatkowego tekstu, bez markdown) w formacie:
             return;
         }
 
+        const availableVariants = [...new Set(
+            offer.items
+                .map((i) => i.variantName)
+                .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+        )];
+
+        const hasVariants = availableVariants.length > 0;
+
+        const selectionSnapshot = parseClientSelectedSnapshot(offer.clientSelectedData);
+        const inferredVariant = inferSelectedVariantFromInteractions(offer.interactions);
+        const selectedVariant = selectionSnapshot?.selectedVariant ?? inferredVariant ?? null;
+
+        const variantHistory = hasVariants ? await this.getVariantHistoryStats(userId) : null;
+
         const fallbackInsight = {
             summary: `Oferta ${offer.number} została ${outcome === 'ACCEPTED' ? 'zaakceptowana' : 'odrzucona'}.`,
             keyLessons: [],
             pricingInsight: 'Brak danych AI do analizy cenowej.',
             improvementSuggestions: [],
             industryNote: '',
+            selectedVariant,
+            availableVariants,
+            variantHistory,
         };
 
         if (!this.ai) {
@@ -547,9 +716,36 @@ Zwróć TYLKO JSON (bez żadnego dodatkowego tekstu, bez markdown) w formacie:
             `[${c.author}] ${c.content}`
         ).join('\n') || 'Brak komentarzy';
 
-        const itemsList = offer.items.map(item =>
-            `- ${item.name}: ${item.unitPrice} PLN × ${item.quantity} ${item.unit} (VAT ${item.vatRate}%)${item.isOptional ? ' [opcjonalny]' : ''}`
-        ).join('\n');
+        const itemsForPrompt = hasVariants && selectedVariant
+            ? offer.items.filter((item) => !item.variantName || item.variantName === selectedVariant)
+            : offer.items;
+
+        const itemsList = selectionSnapshot?.items && selectionSnapshot.items.length > 0
+            ? selectionSnapshot.items.map((item) => {
+                const variantPart = item.variantName ? `, wariant: ${item.variantName}` : '';
+                const selectedPart = item.isSelected ? '' : ' [odznaczony]';
+                return `- ${item.name}: ${item.unitPrice} PLN × ${item.quantity} (VAT ${item.vatRate}%, rabat ${item.discount}%)${variantPart}${selectedPart}`;
+            }).join('\n')
+            : itemsForPrompt.map(item =>
+                `- ${item.name}: ${item.unitPrice} PLN × ${item.quantity} ${item.unit} (VAT ${item.vatRate}%)${item.isOptional ? ' [opcjonalny]' : ''}${item.variantName ? ` [wariant: ${item.variantName}]` : ''}`
+            ).join('\n');
+
+        const selectionSummary = selectionSnapshot?.items && selectionSnapshot.items.length > 0
+            ? (() => {
+                const total = selectionSnapshot.items.length;
+                const selected = selectionSnapshot.items.filter(i => i.isSelected).length;
+                return `Finalna konfiguracja: ${selected}/${total} pozycji zaznaczonych.`;
+            })()
+            : 'Brak finalnej konfiguracji (clientSelectedData).';
+
+        const variantBlock = hasVariants
+            ? `WARIANTOWANIE (Sales Flexibility):
+- Dostępne warianty: ${availableVariants.join(', ') || 'brak'}
+- Wybrany wariant klienta: ${selectedVariant ?? 'nieznany / brak'}
+${variantHistory
+                ? `- Trend (zaakceptowane oferty): ${variantHistory.distribution.map(d => `${d.variant}: ${d.count} (${d.share}%)`).join(', ')}`
+                : '- Trend (zaakceptowane oferty): brak danych.'}`
+            : `WARIANTOWANIE (Sales Flexibility): brak wariantów w tej ofercie.`;
 
         const prompt = `Przeanalizuj zakończoną ofertę handlową i wyciągnij wnioski na przyszłość.
 
@@ -557,6 +753,11 @@ OFERTA: ${offer.number} — ${offer.title}
 WYNIK: ${outcome === 'ACCEPTED' ? 'ZAAKCEPTOWANA' : 'ODRZUCONA'}
 KLIENT: ${offer.client.name}${offer.client.company ? ` (${offer.client.company})` : ''} — typ: ${offer.client.type}
 WARTOŚĆ: ${offer.totalGross} PLN brutto
+
+${variantBlock}
+
+FINALNA KONFIGURACJA / WYBÓR KLIENTA:
+${selectionSummary}
 
 POZYCJE:
 ${itemsList}
@@ -574,7 +775,8 @@ Zwróć TYLKO JSON (bez markdown):
   "keyLessons": ["Lekcja 1", "Lekcja 2"],
   "pricingInsight": "Wnioski dotyczące wyceny — czy ceny były adekwatne",
   "improvementSuggestions": ["Sugestia 1", "Sugestia 2"],
-  "industryNote": "Obserwacja dot. branży lub typu klienta"
+  "industryNote": "Obserwacja dot. branży lub typu klienta",
+  "variantInsight": "Jeśli oferta ma warianty: wnioski o wyborze wariantu i rekomendacje jak to wykorzystać"
 }`;
 
         try {
@@ -586,16 +788,59 @@ Zwróć TYLKO JSON (bez markdown):
             const responseText = response.text || '';
             const jsonMatch = responseText.match(/\{[\s\S]*\}/);
 
-            const insight = jsonMatch
-                ? JSON.parse(jsonMatch[0])
-                : fallbackInsight;
+            const parsed: unknown = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+            const baseObj: Record<string, unknown> = isRecord(parsed) ? parsed : fallbackInsight;
+
+            const existingLessons = Array.isArray(baseObj.keyLessons)
+                ? baseObj.keyLessons
+                    .map((v: unknown) => String(v))
+                    .map((s: string) => s.trim())
+                    .filter((s: string) => s.length > 0)
+                : [];
+
+            const shouldAddVariantTrendLesson =
+                hasVariants &&
+                variantHistory &&
+                typeof variantHistory.topVariant === 'string' &&
+                typeof variantHistory.topVariantShare === 'number' &&
+                variantHistory.totalAcceptedWithVariant >= 3 &&
+                variantHistory.topVariantShare >= 50;
+
+            const variantTrendLesson = shouldAddVariantTrendLesson
+                ? `Warianty: w zaakceptowanych ofertach najczęściej wybierany jest „${variantHistory!.topVariant}” (${variantHistory!.topVariantShare}%, n=${variantHistory!.totalAcceptedWithVariant}).`
+                : null;
+
+            const keyLessons = variantTrendLesson
+                ? [variantTrendLesson, ...existingLessons.filter((l) => l !== variantTrendLesson)]
+                : existingLessons;
+
+            const improvementSuggestions = Array.isArray(baseObj.improvementSuggestions)
+                ? baseObj.improvementSuggestions
+                    .map((v: unknown) => String(v))
+                    .map((s: string) => s.trim())
+                    .filter((s: string) => s.length > 0)
+                : fallbackInsight.improvementSuggestions;
+
+            const industryNote = typeof baseObj.industryNote === 'string' ? baseObj.industryNote : fallbackInsight.industryNote;
+
+            const insightToSave = {
+                ...baseObj,
+                summary: typeof baseObj.summary === 'string' ? baseObj.summary : fallbackInsight.summary,
+                pricingInsight: typeof baseObj.pricingInsight === 'string' ? baseObj.pricingInsight : fallbackInsight.pricingInsight,
+                improvementSuggestions,
+                industryNote,
+                keyLessons,
+                selectedVariant,
+                availableVariants,
+                variantHistory,
+            };
 
             await prisma.offerLegacyInsight.create({
                 data: {
                     offerId,
                     userId,
                     outcome,
-                    insights: insight as unknown as Prisma.InputJsonValue,
+                    insights: insightToSave as unknown as Prisma.InputJsonValue,
                 },
             });
 
@@ -696,7 +941,9 @@ Zwróć TYLKO JSON (bez markdown):
         const legacySummary = legacyInsights.length > 0
             ? legacyInsights.map(l => {
                 const ins = l.insights as Record<string, unknown>;
-                return `[${l.outcome}] ${typeof ins.pricingInsight === 'string' ? ins.pricingInsight : 'brak wniosków cenowych'}`;
+                const selectedVariant = typeof ins.selectedVariant === 'string' ? ins.selectedVariant : null;
+                const variantPart = selectedVariant ? ` (wariant: ${selectedVariant})` : '';
+                return `[${l.outcome}]${variantPart} ${typeof ins.pricingInsight === 'string' ? ins.pricingInsight : 'brak wniosków cenowych'}`;
             }).join('\n')
             : 'Brak wniosków z poprzednich ofert.';
 
@@ -1203,6 +1450,94 @@ Zwróć TYLKO JSON (bez markdown):
             insights: insight.insights as Record<string, unknown>,
             createdAt: insight.createdAt.toISOString(),
         }));
+    }
+
+    async getInsightsList(
+        userId: string,
+        params: {
+            page: number;
+            limit: number;
+            outcome?: 'ACCEPTED' | 'REJECTED';
+            dateFrom?: string;
+            dateTo?: string;
+            search?: string;
+        }
+    ): Promise<{ data: Array<Record<string, unknown>>; total: number }> {
+        const { page, limit, outcome, dateFrom, dateTo, search } = params;
+        const skip = (page - 1) * limit;
+
+        const where: Record<string, unknown> = { userId };
+
+        if (outcome) {
+            where.outcome = outcome;
+        }
+
+        if (dateFrom || dateTo) {
+            const createdAtFilter: Record<string, Date> = {};
+            if (dateFrom) {
+                createdAtFilter.gte = new Date(dateFrom);
+            }
+            if (dateTo) {
+                const endDate = new Date(dateTo);
+                endDate.setHours(23, 59, 59, 999);
+                createdAtFilter.lte = endDate;
+            }
+            where.createdAt = createdAtFilter;
+        }
+
+        if (search) {
+            where.offer = {
+                OR: [
+                    { title: { contains: search, mode: 'insensitive' } },
+                    { number: { contains: search, mode: 'insensitive' } },
+                    { client: { name: { contains: search, mode: 'insensitive' } } },
+                ],
+            };
+        }
+
+        const [insights, total] = await Promise.all([
+            prisma.offerLegacyInsight.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limit,
+                include: {
+                    offer: {
+                        select: {
+                            number: true,
+                            title: true,
+                            totalGross: true,
+                            status: true,
+                            currency: true,
+                            acceptedAt: true,
+                            rejectedAt: true,
+                            client: { select: { name: true, company: true } },
+                        },
+                    },
+                },
+            }),
+            prisma.offerLegacyInsight.count({ where }),
+        ]);
+
+        const data = insights.map(insight => ({
+            id: insight.id,
+            offerId: insight.offerId,
+            offerNumber: insight.offer.number,
+            offerTitle: insight.offer.title,
+            offerValue: Number(insight.offer.totalGross),
+            offerStatus: insight.offer.status,
+            offerCurrency: insight.offer.currency,
+            clientName: insight.offer.client?.name || 'Nieznany',
+            clientCompany: insight.offer.client?.company || null,
+            outcome: insight.outcome,
+            insights: insight.insights as Record<string, unknown>,
+            resolvedAt: insight.outcome === 'ACCEPTED'
+                ? insight.offer.acceptedAt?.toISOString() || null
+                : insight.offer.rejectedAt?.toISOString() || null,
+            createdAt: insight.createdAt.toISOString(),
+        }));
+
+        return { data, total };
     }
 
     clearConversationHistory(userId: string): void {

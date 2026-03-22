@@ -12,6 +12,7 @@ import {
     observerInsightSchema,
     closingStrategySchema,
     latestInsightsSchema,
+    insightsListSchema,
 } from '../validators/ai.validator';
 
 const router = Router();
@@ -37,5 +38,7 @@ router.get('/observer/:offerId', validate(observerInsightSchema), aiController.o
 router.get('/closing-strategy/:offerId', validate(closingStrategySchema), aiController.closingStrategy);
 
 router.get('/latest-insights', validate(latestInsightsSchema), aiController.latestInsights);
+
+router.get('/insights', validate(insightsListSchema), aiController.insightsList);
 
 export default router;

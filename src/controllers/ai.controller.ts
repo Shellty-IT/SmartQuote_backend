@@ -1,9 +1,8 @@
 // smartquote_backend/src/controllers/ai.controller.ts
-
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../types';
 import { aiService } from '../services/ai.service';
-import { successResponse, errorResponse } from '../utils/apiResponse';
+import { successResponse, paginatedResponse, errorResponse } from '../utils/apiResponse';
 import { AISuggestion } from '../types';
 
 export const chat = async (req: AuthenticatedRequest, res: Response) => {
@@ -202,6 +201,25 @@ export const latestInsights = async (req: AuthenticatedRequest, res: Response) =
     } catch (error: unknown) {
         console.error('Latest Insights Error:', error);
         const message = error instanceof Error ? error.message : 'Błąd pobierania wniosków AI';
+        return errorResponse(res, 'AI_ERROR', message, 500);
+    }
+};
+
+export const insightsList = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const userId = req.user!.id;
+        const page = req.query.page ? Number(req.query.page) : 1;
+        const limit = req.query.limit ? Number(req.query.limit) : 10;
+        const outcome = req.query.outcome as 'ACCEPTED' | 'REJECTED' | undefined;
+        const dateFrom = req.query.dateFrom as string | undefined;
+        const dateTo = req.query.dateTo as string | undefined;
+        const search = req.query.search as string | undefined;
+
+        const result = await aiService.getInsightsList(userId, { page, limit, outcome, dateFrom, dateTo, search });
+        return paginatedResponse(res, result.data, result.total, page, limit);
+    } catch (error: unknown) {
+        console.error('Insights List Error:', error);
+        const message = error instanceof Error ? error.message : 'Błąd pobierania listy wniosków AI';
         return errorResponse(res, 'AI_ERROR', message, 500);
     }
 };

@@ -76,3 +76,16 @@ export const latestInsightsSchema = z.object({
     }).optional(),
     params: z.object({}).optional(),
 });
+
+export const insightsListSchema = z.object({
+    body: z.object({}).optional(),
+    query: z.object({
+        page: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(1)).optional(),
+        limit: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(1).max(50)).optional(),
+        outcome: z.enum(['ACCEPTED', 'REJECTED']).optional(),
+        dateFrom: z.string().datetime({ offset: true }).optional().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
+        dateTo: z.string().datetime({ offset: true }).optional().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
+        search: z.string().max(100).optional(),
+    }).optional(),
+    params: z.object({}).optional(),
+});
