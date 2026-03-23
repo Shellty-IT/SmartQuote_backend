@@ -67,6 +67,16 @@ interface SignatureConfirmationEmailData {
     readonly companyName: string | null;
 }
 
+interface FollowUpReminderEmailData {
+    readonly followUpTitle: string;
+    readonly dueDateFormatted: string;
+    readonly priority: string;
+    readonly type: string;
+    readonly clientName: string | null;
+    readonly offerNumber: string | null;
+    readonly contractNumber: string | null;
+}
+
 class EmailService {
     private readonly frontendUrl: string;
 
@@ -144,6 +154,13 @@ class EmailService {
     private ctaButtonEmerald(url: string, label: string): string {
         return `<table cellpadding="0" cellspacing="0" role="presentation" style="margin:24px 0;">
 <tr><td style="background:linear-gradient(135deg,#059669,#0d9488);border-radius:10px;padding:14px 28px;">
+<a href="${url}" style="color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;display:inline-block;" target="_blank">${label}</a>
+</td></tr></table>`;
+    }
+
+    private ctaButtonAmber(url: string, label: string): string {
+        return `<table cellpadding="0" cellspacing="0" role="presentation" style="margin:24px 0;">
+<tr><td style="background:linear-gradient(135deg,#d97706,#ea580c);border-radius:10px;padding:14px 28px;">
 <a href="${url}" style="color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;display:inline-block;" target="_blank">${label}</a>
 </td></tr></table>`;
     }
@@ -391,6 +408,84 @@ ${data.companyName ? `<br/><span style="color:#64748b;">${data.companyName}</spa
         return this.send({
             to,
             subject: `✍️ Potwierdzenie podpisu umowy ${data.contractNumber}`,
+            html,
+        }, smtpConfig);
+    }
+
+    async sendFollowUpReminder(to: string, data: FollowUpReminderEmailData, smtpConfig: SmtpConfig): Promise<boolean> {
+        const url = `${this.frontendUrl}/dashboard/followups`;
+
+        const typeLabels: Record<string, string> = {
+            CALL: '📞 Telefon',
+            EMAIL: '✉️ Email',
+            MEETING: '🤝 Spotkanie',
+            TASK: '✅ Zadanie',
+            REMINDER: '⏰ Przypomnienie',
+            OTHER: '📋 Inne',
+        };
+
+        const priorityLabels: Record<string, string> = {
+            URGENT: 'Pilny',
+            HIGH: 'Wysoki',
+            MEDIUM: 'Średni',
+            LOW: 'Niski',
+        };
+
+        const priorityColors: Record<string, { bg: string; text: string; border: string }> = {
+            URGENT: { bg: '#fef2f2', text: '#991b1b', border: '#fecaca' },
+            HIGH: { bg: '#fff7ed', text: '#9a3412', border: '#fed7aa' },
+            MEDIUM: { bg: '#eff6ff', text: '#1e40af', border: '#bfdbfe' },
+            LOW: { bg: '#f8fafc', text: '#475569', border: '#e2e8f0' },
+        };
+
+        const typeLabel = typeLabels[data.type] || data.type;
+        const priorityLabel = priorityLabels[data.priority] || data.priority;
+        const pColor = priorityColors[data.priority] || priorityColors.MEDIUM;
+
+        const contextLines: string[] = [];
+        if (data.clientName) contextLines.push(`<strong>Klient:</strong> ${data.clientName}`);
+        if (data.offerNumber) contextLines.push(`<strong>Oferta:</strong> ${data.offerNumber}`);
+        if (data.contractNumber) contextLines.push(`<strong>Umowa:</strong> ${data.contractNumber}`);
+
+        const contextBlock = contextLines.length > 0
+            ? `<tr><td style="padding:0 16px 16px;">
+<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Powiązania</p>
+${contextLines.map(l => `<p style="margin:0 0 4px;color:#475569;font-size:13px;line-height:1.5;">${l}</p>`).join('\n')}
+</td></tr>`
+            : '';
+
+        const html = this.baseTemplate(`
+<div style="text-align:center;margin-bottom:24px;">
+<div style="width:56px;height:56px;background:#fffbeb;border-radius:28px;line-height:56px;text-align:center;font-size:28px;display:inline-block;margin-bottom:12px;">⏰</div>
+<h2 style="margin:0;color:#0f172a;font-size:20px;font-weight:700;">Zaległy follow-up</h2>
+</div>
+<p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 16px;">Masz zaległy follow-up, który wymaga Twojej uwagi:</p>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">
+<tr><td style="padding:16px;">
+<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Tytuł</p>
+<p style="margin:0;color:#0f172a;font-size:15px;font-weight:600;">${data.followUpTitle}</p>
+</td></tr>
+<tr><td style="padding:0 16px 16px;">
+<table cellpadding="0" cellspacing="0" role="presentation"><tr>
+<td style="padding-right:8px;">
+<span style="display:inline-block;background:${pColor.bg};color:${pColor.text};border:1px solid ${pColor.border};border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;">${priorityLabel}</span>
+</td>
+<td>
+<span style="display:inline-block;background:#f0f9ff;color:#0c4a6e;border:1px solid #bae6fd;border-radius:6px;padding:4px 10px;font-size:12px;">${typeLabel}</span>
+</td>
+</tr></table>
+</td></tr>
+<tr><td style="padding:0 16px 16px;">
+<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Termin</p>
+<p style="margin:0;color:#dc2626;font-size:14px;font-weight:600;">⚠️ ${data.dueDateFormatted} (zaległy)</p>
+</td></tr>
+${contextBlock}
+</table>
+${this.ctaButtonAmber(url, 'Sprawdź follow-upy →')}`);
+
+        return this.send({
+            to,
+            subject: `⏰ Zaległy follow-up: ${data.followUpTitle}`,
             html,
         }, smtpConfig);
     }
