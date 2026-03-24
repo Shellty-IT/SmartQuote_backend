@@ -3,7 +3,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../types';
 import { offersService } from '../services/offers.service';
-import { pdfService } from '../services/pdf.service';
+import { pdfService } from '../services/pdf';
 import { successResponse, errorResponse, paginatedResponse } from '../utils/apiResponse';
 import prisma from '../lib/prisma';
 

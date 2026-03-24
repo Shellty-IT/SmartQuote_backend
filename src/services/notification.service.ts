@@ -1,9 +1,9 @@
 // smartquote_backend/src/services/notification.service.ts
 import { NotificationType } from '@prisma/client';
 import prisma from '../lib/prisma';
-import { emailService } from './email.service';
+import { emailService } from './email';
 import { getDecryptedSmtpConfig } from './settings.service';
-import type { SmtpConfig } from '../types';
+import type { SmtpConfig } from '@/types';
 
 interface OfferNotificationData {
     offerId: string;

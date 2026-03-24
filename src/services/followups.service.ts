@@ -3,7 +3,6 @@
 import { Prisma, FollowUpStatus, FollowUpType, Priority } from '@prisma/client';
 import prisma from '../lib/prisma';
 
-// Interfejsy dla danych wejściowych
 export interface CreateFollowUpData {
     title: string;
     description?: string | null;

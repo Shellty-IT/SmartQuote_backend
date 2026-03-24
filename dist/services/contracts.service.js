@@ -12,7 +12,6 @@ exports.deleteContract = deleteContract;
 exports.createContractFromOffer = createContractFromOffer;
 exports.getContractsStats = getContractsStats;
 const prisma_1 = __importDefault(require("../lib/prisma"));
-// Helper do konwersji daty
 function toDate(value) {
     if (!value)
         return null;
@@ -20,7 +19,6 @@ function toDate(value) {
         return value;
     return new Date(value);
 }
-// Generowanie numeru umowy
 async function generateContractNumber(userId) {
     const year = new Date().getFullYear();
     const count = await prisma_1.default.contract.count({
@@ -35,7 +33,6 @@ async function generateContractNumber(userId) {
     const number = String(count + 1).padStart(3, '0');
     return `UMW/${year}/${number}`;
 }
-// Obliczanie pozycji
 function calculateItem(item) {
     const quantity = Number(item.quantity);
     const unitPrice = Number(item.unitPrice);
@@ -60,7 +57,6 @@ function calculateItem(item) {
         position: item.position ?? 0,
     };
 }
-// Pobieranie listy umów
 async function getContracts(params) {
     const { userId, page = 1, limit = 10, status, clientId, search } = params;
     const where = { userId };
@@ -100,7 +96,6 @@ async function getContracts(params) {
         },
     };
 }
-// Pobieranie jednej umowy
 async function getContractById(id, userId) {
     const contract = await prisma_1.default.contract.findFirst({
         where: { id, userId },
@@ -108,19 +103,17 @@ async function getContractById(id, userId) {
             client: true,
             offer: true,
             items: { orderBy: { position: 'asc' } },
+            signatureLog: true,
         },
     });
     return contract;
 }
-// Tworzenie umowy
 async function createContract(userId, data) {
     const number = await generateContractNumber(userId);
-    // Oblicz pozycje
     const calculatedItems = data.items.map((item, index) => ({
         ...calculateItem(item),
         position: item.position ?? index,
     }));
-    // Oblicz sumy
     const totalNet = calculatedItems.reduce((sum, item) => sum + item.totalNet, 0);
     const totalVat = calculatedItems.reduce((sum, item) => sum + item.totalVat, 0);
     const totalGross = calculatedItems.reduce((sum, item) => sum + item.totalGross, 0);
@@ -152,7 +145,6 @@ async function createContract(userId, data) {
     });
     return contract;
 }
-// Aktualizacja umowy
 async function updateContract(id, userId, data) {
     const existing = await prisma_1.default.contract.findFirst({
         where: { id, userId },
@@ -163,7 +155,6 @@ async function updateContract(id, userId, data) {
     let itemsData = undefined;
     let totals = {};
     if (data.items) {
-        // Usuń stare pozycje i dodaj nowe
         await prisma_1.default.contractItem.deleteMany({ where: { contractId: id } });
         const calculatedItems = data.items.map((item, index) => ({
             ...calculateItem(item),
@@ -199,7 +190,6 @@ async function updateContract(id, userId, data) {
     });
     return contract;
 }
-// Usuwanie umowy
 async function deleteContract(id, userId) {
     const existing = await prisma_1.default.contract.findFirst({
         where: { id, userId },
@@ -210,7 +200,6 @@ async function deleteContract(id, userId) {
     await prisma_1.default.contract.delete({ where: { id } });
     return true;
 }
-// Tworzenie umowy z oferty
 async function createContractFromOffer(offerId, userId) {
     const offer = await prisma_1.default.offer.findFirst({
         where: { id: offerId, userId },
@@ -242,7 +231,6 @@ async function createContractFromOffer(offerId, userId) {
     };
     return createContract(userId, contractData);
 }
-// Statystyki umów
 async function getContractsStats(userId) {
     const [total, byStatus, values] = await Promise.all([
         prisma_1.default.contract.count({ where: { userId } }),

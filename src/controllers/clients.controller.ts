@@ -1,6 +1,6 @@
 import { Response } from 'express';
-import { AuthenticatedRequest } from '../types';
-import { clientsService } from '../services/clients.service';
+import { AuthenticatedRequest } from '@/types';
+import { clientsService } from '@/services/clients.service';
 import { successResponse, errorResponse, paginatedResponse } from '../utils/apiResponse';
 
 export class ClientsController {

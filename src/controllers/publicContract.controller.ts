@@ -1,8 +1,10 @@
-// smartquote_backend/src/controllers/publicContract.controller.ts
+// src/controllers/publicContract.controller.ts
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
-import { pdfService } from '../services/pdf.service';
-import { successResponse, errorResponse } from '../utils/apiResponse';
+import { pdfService } from '@/services/pdf';
+import { publicContractService } from '@/services/publicContract.service';
+import { successResponse, errorResponse } from '@/utils/apiResponse';
+import { mapToPDFUser, mapToPDFClient } from '@/services/pdf/data-mapper';
 
 class PublicContractController {
     async getContract(req: Request<{ token: string }>, res: Response) {
@@ -25,8 +27,19 @@ class PublicContractController {
                         },
                     },
                     items: { orderBy: { position: 'asc' } },
+                    signatureLog: {
+                        select: {
+                            signerName: true,
+                            signerEmail: true,
+                            signedAt: true,
+                            contentHash: true,
+                            signatureImage: true,
+                            ipAddress: true,
+                        },
+                    },
                     user: {
                         select: {
+                            id: true,
                             name: true,
                             email: true,
                             phone: true,
@@ -52,17 +65,7 @@ class PublicContractController {
                 return errorResponse(res, 'NOT_FOUND', 'Umowa nie została znaleziona lub link jest nieaktywny', 404);
             }
 
-            const seller = {
-                name: contract.user.companyInfo?.name || contract.user.name,
-                email: contract.user.companyInfo?.email || contract.user.email,
-                phone: contract.user.companyInfo?.phone || contract.user.phone,
-                nip: contract.user.companyInfo?.nip || null,
-                address: contract.user.companyInfo?.address || null,
-                city: contract.user.companyInfo?.city || null,
-                postalCode: contract.user.companyInfo?.postalCode || null,
-                website: contract.user.companyInfo?.website || null,
-                logo: contract.user.companyInfo?.logo || null,
-            };
+            const seller = mapToPDFUser(contract.user);
 
             const items = contract.items.map(item => ({
                 id: item.id,
@@ -100,6 +103,7 @@ class PublicContractController {
                     items,
                     client: contract.client,
                     seller,
+                    signatureLog: contract.signatureLog || null,
                 },
             });
         } catch (error: unknown) {
@@ -145,14 +149,11 @@ class PublicContractController {
 
             const pdfContract = {
                 ...contract,
-                user: {
-                    ...contract.user,
-                    company: contract.user.companyInfo?.name || null,
-                    phone: contract.user.companyInfo?.phone || contract.user.phone,
-                },
+                user: mapToPDFUser(contract.user),
+                client: mapToPDFClient(contract.client),
             };
 
-            const pdfBuffer = await pdfService.generateContractPDF(pdfContract);
+            const pdfBuffer = await pdfService.generateContractPDF(pdfContract as any);
 
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', `attachment; filename="umowa-${contract.number.replace(/\//g, '-')}.pdf"`);
@@ -162,6 +163,41 @@ class PublicContractController {
         } catch (error: unknown) {
             console.error('[PublicContract] DownloadPdf error:', error);
             return errorResponse(res, 'INTERNAL_ERROR', 'Błąd generowania PDF', 500);
+        }
+    }
+
+    async signContract(req: Request<{ token: string }>, res: Response) {
+        try {
+            const { token } = req.params;
+            const { signerName, signerEmail, signatureImage } = req.body;
+
+            const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+                || req.socket.remoteAddress
+                || 'unknown';
+            const userAgent = req.headers['user-agent'] || 'unknown';
+
+            const result = await publicContractService.signContract(token, {
+                signerName,
+                signerEmail,
+                signatureImage,
+                ipAddress,
+                userAgent,
+            });
+
+            if (result.error) {
+                const statusMap: Record<string, number> = {
+                    NOT_FOUND: 404,
+                    ALREADY_SIGNED: 409,
+                    INVALID_STATUS: 400,
+                };
+                const status = statusMap[result.error] || 400;
+                return errorResponse(res, result.error, result.message || 'Błąd podpisywania', status);
+            }
+
+            return successResponse(res, result.data);
+        } catch (error: unknown) {
+            console.error('[PublicContract] SignContract error:', error);
+            return errorResponse(res, 'INTERNAL_ERROR', 'Błąd podpisywania umowy', 500);
         }
     }
 }

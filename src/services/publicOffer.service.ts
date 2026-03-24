@@ -1,13 +1,12 @@
 // smartquote_backend/src/services/publicOffer.service.ts
-
 import prisma from '../lib/prisma';
 import { Decimal } from '@prisma/client/runtime/library';
 import { Prisma } from '@prisma/client';
-import { aiService } from './ai.service';
 import { notificationService } from './notification.service';
-import { emailService } from './email.service';
+import { emailService } from './email';
 import { getDecryptedSmtpConfig } from './settings.service';
-import { generateContentHash } from '../utils/contentHash';
+import { generateContentHash } from '@/utils/contentHash';
+import { triggerPostMortem } from './shared/postmortem.utils';
 
 interface AcceptOfferOptions {
     readonly token: string;
@@ -20,16 +19,6 @@ interface AcceptOfferOptions {
 }
 
 export class PublicOfferService {
-    private triggerPostMortem(userId: string, offerId: string, outcome: 'ACCEPTED' | 'REJECTED'): void {
-        aiService.generatePostMortem(userId, offerId, outcome)
-            .then(() => {
-                console.log(`✅ Post-mortem generated for public offer ${offerId} [${outcome}]`);
-            })
-            .catch((err: unknown) => {
-                console.error(`❌ Post-mortem failed for public offer ${offerId}:`, err);
-            });
-    }
-
     private sendAcceptanceConfirmationEmail(
         userId: string,
         clientEmail: string,
@@ -75,10 +64,10 @@ export class PublicOfferService {
                 );
             })
             .then(() => {
-                console.log(`📧 Acceptance confirmation sent to ${clientEmail}`);
+                console.log(`Acceptance confirmation sent to ${clientEmail}`);
             })
             .catch((err: unknown) => {
-                console.error('❌ Acceptance confirmation email failed:', err);
+                console.error('Acceptance confirmation email failed:', err);
             });
     }
 
@@ -276,7 +265,7 @@ export class PublicOfferService {
                 offerTitle: offer.title,
                 clientName: offer.client.name,
             }).catch((err: unknown) => {
-                console.error('❌ Notification failed (offerViewed):', err);
+                console.error('Notification failed (offerViewed):', err);
             });
         }
 
@@ -305,11 +294,9 @@ export class PublicOfferService {
         });
 
         if (!offer) return { error: 'NOT_FOUND' as const };
-
         if (offer.status === 'ACCEPTED' || offer.status === 'REJECTED') {
             return { error: 'ALREADY_DECIDED' as const };
         }
-
         if (offer.validUntil && new Date(offer.validUntil) < new Date()) {
             return { error: 'EXPIRED' as const };
         }
@@ -447,7 +434,7 @@ export class PublicOfferService {
 
         await prisma.$transaction(transactionOps);
 
-        this.triggerPostMortem(offer.user.id, offer.id, 'ACCEPTED');
+        triggerPostMortem(offer.user.id, offer.id, 'ACCEPTED', 'public');
 
         notificationService.offerAccepted(offer.user.id, offer.user.email, {
             offerId: offer.id,
@@ -457,7 +444,7 @@ export class PublicOfferService {
             totalGross: grossValue,
             currency: offer.currency,
         }).catch((err: unknown) => {
-            console.error('❌ Notification failed (offerAccepted):', err);
+            console.error('Notification failed (offerAccepted):', err);
         });
 
         if (offer.requireAuditTrail && contentHash) {
@@ -521,11 +508,9 @@ export class PublicOfferService {
         });
 
         if (!offer) return { error: 'NOT_FOUND' as const };
-
         if (offer.status === 'ACCEPTED' || offer.status === 'REJECTED') {
             return { error: 'ALREADY_DECIDED' as const };
         }
-
         if (offer.validUntil && new Date(offer.validUntil) < new Date()) {
             return { error: 'EXPIRED' as const };
         }
@@ -547,7 +532,7 @@ export class PublicOfferService {
             }),
         ]);
 
-        this.triggerPostMortem(offer.user.id, offer.id, 'REJECTED');
+        triggerPostMortem(offer.user.id, offer.id, 'REJECTED', 'public');
 
         notificationService.offerRejected(offer.user.id, offer.user.email, {
             offerId: offer.id,
@@ -556,7 +541,7 @@ export class PublicOfferService {
             clientName: offer.client.name,
             reason: reason || undefined,
         }).catch((err: unknown) => {
-            console.error('❌ Notification failed (offerRejected):', err);
+            console.error('Notification failed (offerRejected):', err);
         });
 
         return {
@@ -589,7 +574,6 @@ export class PublicOfferService {
         });
 
         if (!offer) return null;
-
         if (offer.validUntil && new Date(offer.validUntil) < new Date()) {
             return null;
         }
@@ -618,7 +602,7 @@ export class PublicOfferService {
             clientName: offer.client.name,
             commentPreview: content,
         }).catch((err: unknown) => {
-            console.error('❌ Notification failed (offerComment):', err);
+            console.error('Notification failed (offerComment):', err);
         });
 
         return {
@@ -639,7 +623,6 @@ export class PublicOfferService {
         });
 
         if (!offer) return null;
-
         if (offer.validUntil && new Date(offer.validUntil) < new Date()) {
             return null;
         }

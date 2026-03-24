@@ -2,7 +2,7 @@
 import { createHash } from 'crypto';
 import prisma from '../lib/prisma';
 import { Prisma } from '@prisma/client';
-import { emailService } from './email.service';
+import { emailService } from './email';
 
 interface SignContractInput {
     signerName: string;

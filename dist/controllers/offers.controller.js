@@ -6,7 +6,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.offersController = exports.OffersController = void 0;
 const offers_service_1 = require("../services/offers.service");
-const pdf_service_1 = require("../services/pdf.service");
+const pdf_1 = require("../services/pdf");
 const apiResponse_1 = require("../utils/apiResponse");
 const prisma_1 = __importDefault(require("../lib/prisma"));
 class OffersController {
@@ -139,7 +139,7 @@ class OffersController {
                     phone: offer.user.companyInfo?.phone || offer.user.phone,
                 },
             };
-            const pdfBuffer = await pdf_service_1.pdfService.generateOfferPDF(pdfOffer);
+            const pdfBuffer = await pdf_1.pdfService.generateOfferPDF(pdfOffer);
             const filename = `Oferta_${offer.number.replace(/\//g, '-')}.pdf`;
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

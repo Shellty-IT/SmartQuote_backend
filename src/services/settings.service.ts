@@ -1,11 +1,11 @@
 // smartquote_backend/src/services/settings.service.ts
 
 import crypto from 'crypto';
-import prisma from '../lib/prisma';
+import prisma from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
-import { encrypt, decrypt } from '../utils/crypto';
-import { emailService } from './email.service';
-import type { SmtpConfig } from '../types';
+import { encrypt, decrypt } from '@/utils/crypto';
+import { emailService } from './email';
+import type { SmtpConfig } from '@/types';
 
 export async function getProfile(userId: string) {
     const user = await prisma.user.findUnique({

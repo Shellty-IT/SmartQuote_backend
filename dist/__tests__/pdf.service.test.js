@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 // smartquote_backend/src/__tests__/pdf.service.test.ts
 const library_1 = require("@prisma/client/runtime/library");
-const pdf_service_1 = require("../services/pdf.service");
+const pdf_1 = require("../services/pdf");
 function d(val) {
     return new library_1.Decimal(val);
 }
@@ -131,7 +131,7 @@ function createTestContract(overrides = {}) {
 describe('PDFService — generateOfferPDF', () => {
     it('returns a valid PDF buffer', async () => {
         const offer = createTestOffer();
-        const buffer = await pdf_service_1.pdfService.generateOfferPDF(offer);
+        const buffer = await pdf_1.pdfService.generateOfferPDF(offer);
         expect(buffer).toBeInstanceOf(Buffer);
         expect(buffer.length).toBeGreaterThan(500);
         const header = buffer.subarray(0, 5).toString('ascii');
@@ -181,7 +181,7 @@ describe('PDFService — generateOfferPDF', () => {
                 },
             ],
         });
-        const buffer = await pdf_service_1.pdfService.generateOfferPDF(offer);
+        const buffer = await pdf_1.pdfService.generateOfferPDF(offer);
         expect(buffer).toBeInstanceOf(Buffer);
         expect(buffer.length).toBeGreaterThan(1000);
     });
@@ -191,13 +191,13 @@ describe('PDFService — generateOfferPDF', () => {
             terms: null,
             notes: null,
         });
-        const buffer = await pdf_service_1.pdfService.generateOfferPDF(offer);
+        const buffer = await pdf_1.pdfService.generateOfferPDF(offer);
         expect(buffer).toBeInstanceOf(Buffer);
         expect(buffer.length).toBeGreaterThan(500);
     });
     it('handles offer with no validUntil date', async () => {
         const offer = createTestOffer({ validUntil: null });
-        const buffer = await pdf_service_1.pdfService.generateOfferPDF(offer);
+        const buffer = await pdf_1.pdfService.generateOfferPDF(offer);
         expect(buffer).toBeInstanceOf(Buffer);
     });
     it('handles PERSON client type', async () => {
@@ -215,7 +215,7 @@ describe('PDFService — generateOfferPDF', () => {
                 postalCode: null,
             },
         });
-        const buffer = await pdf_service_1.pdfService.generateOfferPDF(offer);
+        const buffer = await pdf_1.pdfService.generateOfferPDF(offer);
         expect(buffer).toBeInstanceOf(Buffer);
     });
     it('handles zero-value items', async () => {
@@ -239,7 +239,7 @@ describe('PDFService — generateOfferPDF', () => {
                 },
             ],
         });
-        const buffer = await pdf_service_1.pdfService.generateOfferPDF(offer);
+        const buffer = await pdf_1.pdfService.generateOfferPDF(offer);
         expect(buffer).toBeInstanceOf(Buffer);
     });
     it('handles user without company name', async () => {
@@ -252,14 +252,14 @@ describe('PDFService — generateOfferPDF', () => {
                 phone: null,
             },
         });
-        const buffer = await pdf_service_1.pdfService.generateOfferPDF(offer);
+        const buffer = await pdf_1.pdfService.generateOfferPDF(offer);
         expect(buffer).toBeInstanceOf(Buffer);
     });
 });
 describe('PDFService — generateContractPDF', () => {
     it('returns a valid PDF buffer', async () => {
         const contract = createTestContract();
-        const buffer = await pdf_service_1.pdfService.generateContractPDF(contract);
+        const buffer = await pdf_1.pdfService.generateContractPDF(contract);
         expect(buffer).toBeInstanceOf(Buffer);
         expect(buffer.length).toBeGreaterThan(500);
         const header = buffer.subarray(0, 5).toString('ascii');
@@ -275,7 +275,7 @@ describe('PDFService — generateContractPDF', () => {
             endDate: null,
             signedAt: null,
         });
-        const buffer = await pdf_service_1.pdfService.generateContractPDF(contract);
+        const buffer = await pdf_1.pdfService.generateContractPDF(contract);
         expect(buffer).toBeInstanceOf(Buffer);
     });
     it('handles contract with many items', async () => {
@@ -293,7 +293,7 @@ describe('PDFService — generateContractPDF', () => {
             totalGross: d(Math.round((100 + i * 50) * (i + 1) * 1.23)),
         }));
         const contract = createTestContract({ items });
-        const buffer = await pdf_service_1.pdfService.generateContractPDF(contract);
+        const buffer = await pdf_1.pdfService.generateContractPDF(contract);
         expect(buffer).toBeInstanceOf(Buffer);
         expect(buffer.length).toBeGreaterThan(2000);
     });
@@ -312,7 +312,7 @@ describe('PDFService — generateContractPDF', () => {
                 postalCode: '80-001',
             },
         });
-        const buffer = await pdf_service_1.pdfService.generateContractPDF(contract);
+        const buffer = await pdf_1.pdfService.generateContractPDF(contract);
         expect(buffer).toBeInstanceOf(Buffer);
     });
 });

@@ -51,4 +51,5 @@ router.post('/price-insight', (0, validate_1.validate)(ai_validator_1.priceInsig
 router.get('/observer/:offerId', (0, validate_1.validate)(ai_validator_1.observerInsightSchema), aiController.observerInsight);
 router.get('/closing-strategy/:offerId', (0, validate_1.validate)(ai_validator_1.closingStrategySchema), aiController.closingStrategy);
 router.get('/latest-insights', (0, validate_1.validate)(ai_validator_1.latestInsightsSchema), aiController.latestInsights);
+router.get('/insights', (0, validate_1.validate)(ai_validator_1.insightsListSchema), aiController.insightsList);
 exports.default = router;

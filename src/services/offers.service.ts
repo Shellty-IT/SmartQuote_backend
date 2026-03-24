@@ -1,124 +1,15 @@
 // smartquote_backend/src/services/offers.service.ts
-
 import crypto from 'crypto';
 import { Prisma, OfferStatus } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { CreateOfferInput, UpdateOfferInput, PaginationQuery, OfferItemInput } from '../types';
 import { generateOfferNumber } from '../utils/offerNumber';
-import { Decimal } from '@prisma/client/runtime/library';
-import { aiService } from './ai.service';
-import { emailService } from './email.service';
+import { emailService } from '@/services/email';
 import { getDecryptedSmtpConfig } from './settings.service';
-
-interface ItemCalculation {
-    readonly quantity: number;
-    readonly unitPrice: number;
-    readonly vatRate?: number;
-    readonly discount?: number;
-}
-
-interface ItemWithTotals {
-    readonly name: string;
-    readonly description: string | undefined;
-    readonly quantity: number;
-    readonly unit: string;
-    readonly unitPrice: number;
-    readonly vatRate: number;
-    readonly discount: number;
-    readonly totalNet: Decimal;
-    readonly totalVat: Decimal;
-    readonly totalGross: Decimal;
-    readonly position: number;
-    readonly isOptional: boolean;
-    readonly isSelected: boolean;
-    readonly minQuantity: number;
-    readonly maxQuantity: number;
-    readonly variantName: string | null;
-}
+import { buildItemWithTotals, calculateOfferTotals } from './shared/offer-calculations';
+import { triggerPostMortem } from './shared/postmortem.utils';
 
 export class OffersService {
-    private triggerPostMortem(userId: string, offerId: string, outcome: 'ACCEPTED' | 'REJECTED'): void {
-        aiService.generatePostMortem(userId, offerId, outcome)
-            .then(() => {
-                console.log(`✅ Post-mortem generated for offer ${offerId} [${outcome}] (manual)`);
-            })
-            .catch((err: unknown) => {
-                console.error(`❌ Post-mortem failed for offer ${offerId}:`, err);
-            });
-    }
-
-    private calculateItemTotals(item: ItemCalculation): {
-        totalNet: Decimal;
-        totalVat: Decimal;
-        totalGross: Decimal;
-    } {
-        const quantity = new Decimal(item.quantity);
-        const unitPrice = new Decimal(item.unitPrice);
-        const vatRate = new Decimal(item.vatRate || 23);
-        const discount = new Decimal(item.discount || 0);
-
-        const discountMultiplier = new Decimal(1).minus(discount.dividedBy(100));
-        const effectiveUnitPrice = unitPrice.times(discountMultiplier);
-
-        const totalNet = quantity.times(effectiveUnitPrice);
-        const totalVat = totalNet.times(vatRate.dividedBy(100));
-        const totalGross = totalNet.plus(totalVat);
-
-        return {
-            totalNet: totalNet.toDecimalPlaces(2),
-            totalVat: totalVat.toDecimalPlaces(2),
-            totalGross: totalGross.toDecimalPlaces(2),
-        };
-    }
-
-    private buildItemWithTotals(item: OfferItemInput, index: number): ItemWithTotals {
-        const totals = this.calculateItemTotals(item);
-        return {
-            name: item.name,
-            description: item.description,
-            quantity: item.quantity,
-            unit: item.unit || 'szt.',
-            unitPrice: item.unitPrice,
-            vatRate: item.vatRate || 23,
-            discount: item.discount || 0,
-            totalNet: totals.totalNet,
-            totalVat: totals.totalVat,
-            totalGross: totals.totalGross,
-            position: index,
-            isOptional: item.isOptional || false,
-            isSelected: true,
-            minQuantity: item.minQuantity || 1,
-            maxQuantity: item.maxQuantity || 100,
-            variantName: item.variantName || null,
-        };
-    }
-
-    private calculateOfferTotals(items: ItemWithTotals[]): {
-        totalNet: Decimal;
-        totalVat: Decimal;
-        totalGross: Decimal;
-    } {
-        const baseItems = items.filter((item) => !item.variantName);
-
-        if (baseItems.length === items.length) {
-            return {
-                totalNet: items.reduce((sum, item) => sum.plus(item.totalNet), new Decimal(0)),
-                totalVat: items.reduce((sum, item) => sum.plus(item.totalVat), new Decimal(0)),
-                totalGross: items.reduce((sum, item) => sum.plus(item.totalGross), new Decimal(0)),
-            };
-        }
-
-        const variantNames = [...new Set(items.filter((i) => i.variantName).map((i) => i.variantName!))];
-        const firstVariantItems = items.filter((i) => i.variantName === variantNames[0]);
-        const allDefaultItems = [...baseItems, ...firstVariantItems];
-
-        return {
-            totalNet: allDefaultItems.reduce((sum, item) => sum.plus(item.totalNet), new Decimal(0)),
-            totalVat: allDefaultItems.reduce((sum, item) => sum.plus(item.totalVat), new Decimal(0)),
-            totalGross: allDefaultItems.reduce((sum, item) => sum.plus(item.totalGross), new Decimal(0)),
-        };
-    }
-
     async create(userId: string, data: CreateOfferInput) {
         const client = await prisma.client.findFirst({
             where: { id: data.clientId, userId },
@@ -131,10 +22,10 @@ export class OffersService {
         const number = await generateOfferNumber(userId);
 
         const itemsWithTotals = data.items.map((item: OfferItemInput, index: number) =>
-            this.buildItemWithTotals(item, index)
+            buildItemWithTotals(item, index)
         );
 
-        const offerTotals = this.calculateOfferTotals(itemsWithTotals);
+        const offerTotals = calculateOfferTotals(itemsWithTotals);
 
         return prisma.offer.create({
             data: {
@@ -287,10 +178,10 @@ export class OffersService {
 
         if (data.items && data.items.length > 0) {
             const itemsWithTotals = data.items.map((item: OfferItemInput, index: number) =>
-                this.buildItemWithTotals(item, index)
+                buildItemWithTotals(item, index)
             );
 
-            const offerTotals = this.calculateOfferTotals(itemsWithTotals);
+            const offerTotals = calculateOfferTotals(itemsWithTotals);
 
             result = await prisma.$transaction(async (tx) => {
                 await tx.offerItem.deleteMany({ where: { offerId: id } });
@@ -328,7 +219,7 @@ export class OffersService {
             previousStatus !== data.status;
 
         if (isTerminalChange) {
-            this.triggerPostMortem(userId, id, data.status as 'ACCEPTED' | 'REJECTED');
+            triggerPostMortem(userId, id, data.status as 'ACCEPTED' | 'REJECTED', 'manual');
         }
 
         return result;

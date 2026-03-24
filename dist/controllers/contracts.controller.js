@@ -14,13 +14,14 @@ exports.updateContractStatus = updateContractStatus;
 exports.publishContract = publishContract;
 exports.unpublishContract = unpublishContract;
 exports.deleteContract = deleteContract;
-// smartquote_backend/src/controllers/contracts.controller.ts
+// src/controllers/contracts.controller.ts
 require("../types");
 const crypto_1 = require("crypto");
 const contracts_service_1 = __importDefault(require("../services/contracts.service"));
-const pdf_service_1 = require("../services/pdf.service");
+const pdf_1 = require("@/services/pdf");
 const prisma_1 = __importDefault(require("../lib/prisma"));
-const apiResponse_1 = require("../utils/apiResponse");
+const apiResponse_1 = require("@/utils/apiResponse");
+const data_mapper_1 = require("@/services/pdf/data-mapper");
 async function getContracts(req, res, next) {
     try {
         const userId = req.user.id;
@@ -100,13 +101,10 @@ async function generateContractPDF(req, res, next) {
         }
         const pdfContract = {
             ...contract,
-            user: {
-                ...contract.user,
-                company: contract.user.companyInfo?.name || null,
-                phone: contract.user.companyInfo?.phone || contract.user.phone,
-            },
+            user: (0, data_mapper_1.mapToPDFUser)(contract.user),
+            client: (0, data_mapper_1.mapToPDFClient)(contract.client),
         };
-        const pdfBuffer = await pdf_service_1.pdfService.generateContractPDF(pdfContract);
+        const pdfBuffer = await pdf_1.pdfService.generateContractPDF(pdfContract);
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="umowa-${contract.number.replace(/\//g, '-')}.pdf"`);
         res.setHeader('Content-Length', pdfBuffer.length);

@@ -1,12 +1,13 @@
-// smartquote_backend/src/controllers/contracts.controller.ts
+// src/controllers/contracts.controller.ts
 import '../types';
 import { Request, Response, NextFunction } from 'express';
 import { randomBytes } from 'crypto';
 import contractsService from '../services/contracts.service';
-import { pdfService } from '../services/pdf.service';
+import { pdfService } from '@/services/pdf';
 import prisma from '../lib/prisma';
-import { successResponse, errorResponse, paginatedResponse } from '../utils/apiResponse';
+import { successResponse, errorResponse, paginatedResponse } from '@/utils/apiResponse';
 import { ContractStatus } from '@prisma/client';
+import { mapToPDFUser, mapToPDFClient } from '@/services/pdf/data-mapper';
 
 export async function getContracts(req: Request, res: Response, next: NextFunction) {
     try {
@@ -102,14 +103,11 @@ export async function generateContractPDF(req: Request, res: Response, next: Nex
 
         const pdfContract = {
             ...contract,
-            user: {
-                ...contract.user,
-                company: contract.user.companyInfo?.name || null,
-                phone: contract.user.companyInfo?.phone || contract.user.phone,
-            },
+            user: mapToPDFUser(contract.user),
+            client: mapToPDFClient(contract.client),
         };
 
-        const pdfBuffer = await pdfService.generateContractPDF(pdfContract);
+        const pdfBuffer = await pdfService.generateContractPDF(pdfContract as any);
 
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="umowa-${contract.number.replace(/\//g, '-')}.pdf"`);

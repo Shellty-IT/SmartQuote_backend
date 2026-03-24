@@ -1,27 +1,18 @@
 "use strict";
-// smartquote_backend/src/services/publicOffer.service.ts
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.publicOfferService = exports.PublicOfferService = void 0;
+// smartquote_backend/src/services/publicOffer.service.ts
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const library_1 = require("@prisma/client/runtime/library");
-const ai_service_1 = require("./ai.service");
 const notification_service_1 = require("./notification.service");
-const email_service_1 = require("./email.service");
+const email_1 = require("./email");
 const settings_service_1 = require("./settings.service");
-const contentHash_1 = require("../utils/contentHash");
+const contentHash_1 = require("@/utils/contentHash");
+const postmortem_utils_1 = require("./shared/postmortem.utils");
 class PublicOfferService {
-    triggerPostMortem(userId, offerId, outcome) {
-        ai_service_1.aiService.generatePostMortem(userId, offerId, outcome)
-            .then(() => {
-            console.log(`✅ Post-mortem generated for public offer ${offerId} [${outcome}]`);
-        })
-            .catch((err) => {
-            console.error(`❌ Post-mortem failed for public offer ${offerId}:`, err);
-        });
-    }
     sendAcceptanceConfirmationEmail(userId, clientEmail, data) {
         const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
         (0, settings_service_1.getDecryptedSmtpConfig)(userId)
@@ -30,7 +21,7 @@ class PublicOfferService {
                 console.log('ℹ️ No SMTP config for acceptance confirmation email');
                 return;
             }
-            return email_service_1.emailService.sendAcceptanceConfirmation(clientEmail, {
+            return email_1.emailService.sendAcceptanceConfirmation(clientEmail, {
                 offerNumber: data.offerNumber,
                 offerTitle: data.offerTitle,
                 clientName: data.clientName,
@@ -45,10 +36,10 @@ class PublicOfferService {
             }, smtpConfig);
         })
             .then(() => {
-            console.log(`📧 Acceptance confirmation sent to ${clientEmail}`);
+            console.log(`Acceptance confirmation sent to ${clientEmail}`);
         })
             .catch((err) => {
-            console.error('❌ Acceptance confirmation email failed:', err);
+            console.error('Acceptance confirmation email failed:', err);
         });
     }
     async getOfferByToken(token) {
@@ -233,7 +224,7 @@ class PublicOfferService {
                 offerTitle: offer.title,
                 clientName: offer.client.name,
             }).catch((err) => {
-                console.error('❌ Notification failed (offerViewed):', err);
+                console.error('Notification failed (offerViewed):', err);
             });
         }
         return true;
@@ -378,7 +369,7 @@ class PublicOfferService {
             }));
         }
         await prisma_1.default.$transaction(transactionOps);
-        this.triggerPostMortem(offer.user.id, offer.id, 'ACCEPTED');
+        (0, postmortem_utils_1.triggerPostMortem)(offer.user.id, offer.id, 'ACCEPTED', 'public');
         notification_service_1.notificationService.offerAccepted(offer.user.id, offer.user.email, {
             offerId: offer.id,
             offerNumber: offer.number,
@@ -387,7 +378,7 @@ class PublicOfferService {
             totalGross: grossValue,
             currency: offer.currency,
         }).catch((err) => {
-            console.error('❌ Notification failed (offerAccepted):', err);
+            console.error('Notification failed (offerAccepted):', err);
         });
         if (offer.requireAuditTrail && contentHash) {
             const recipientEmail = clientEmail || offer.client.email;
@@ -466,7 +457,7 @@ class PublicOfferService {
                 },
             }),
         ]);
-        this.triggerPostMortem(offer.user.id, offer.id, 'REJECTED');
+        (0, postmortem_utils_1.triggerPostMortem)(offer.user.id, offer.id, 'REJECTED', 'public');
         notification_service_1.notificationService.offerRejected(offer.user.id, offer.user.email, {
             offerId: offer.id,
             offerNumber: offer.number,
@@ -474,7 +465,7 @@ class PublicOfferService {
             clientName: offer.client.name,
             reason: reason || undefined,
         }).catch((err) => {
-            console.error('❌ Notification failed (offerRejected):', err);
+            console.error('Notification failed (offerRejected):', err);
         });
         return {
             success: true,
@@ -531,7 +522,7 @@ class PublicOfferService {
             clientName: offer.client.name,
             commentPreview: content,
         }).catch((err) => {
-            console.error('❌ Notification failed (offerComment):', err);
+            console.error('Notification failed (offerComment):', err);
         });
         return {
             comment,

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.latestInsightsSchema = exports.closingStrategySchema = exports.observerInsightSchema = exports.priceInsightSchema = exports.analyzeClientSchema = exports.generateEmailSchema = exports.generateOfferSchema = exports.chatSchema = void 0;
+exports.insightsListSchema = exports.latestInsightsSchema = exports.closingStrategySchema = exports.observerInsightSchema = exports.priceInsightSchema = exports.analyzeClientSchema = exports.generateEmailSchema = exports.generateOfferSchema = exports.chatSchema = void 0;
 // smartquote_backend/src/validators/ai.validator.ts
 const zod_1 = require("zod");
 exports.chatSchema = zod_1.z.object({
@@ -66,6 +66,18 @@ exports.latestInsightsSchema = zod_1.z.object({
     body: zod_1.z.object({}).optional(),
     query: zod_1.z.object({
         limit: zod_1.z.string().regex(/^\d+$/).transform(Number).pipe(zod_1.z.number().min(1).max(20)).optional(),
+    }).optional(),
+    params: zod_1.z.object({}).optional(),
+});
+exports.insightsListSchema = zod_1.z.object({
+    body: zod_1.z.object({}).optional(),
+    query: zod_1.z.object({
+        page: zod_1.z.string().regex(/^\d+$/).transform(Number).pipe(zod_1.z.number().min(1)).optional(),
+        limit: zod_1.z.string().regex(/^\d+$/).transform(Number).pipe(zod_1.z.number().min(1).max(50)).optional(),
+        outcome: zod_1.z.enum(['ACCEPTED', 'REJECTED']).optional(),
+        dateFrom: zod_1.z.string().datetime({ offset: true }).optional().or(zod_1.z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
+        dateTo: zod_1.z.string().datetime({ offset: true }).optional().or(zod_1.z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
+        search: zod_1.z.string().max(100).optional(),
     }).optional(),
     params: zod_1.z.object({}).optional(),
 });

@@ -5,8 +5,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.publicContractController = void 0;
 const prisma_1 = __importDefault(require("../lib/prisma"));
-const pdf_service_1 = require("../services/pdf.service");
-const apiResponse_1 = require("../utils/apiResponse");
+const pdf_1 = require("@/services/pdf");
+const publicContract_service_1 = require("@/services/publicContract.service");
+const apiResponse_1 = require("@/utils/apiResponse");
+const data_mapper_1 = require("@/services/pdf/data-mapper");
 class PublicContractController {
     async getContract(req, res) {
         try {
@@ -27,8 +29,19 @@ class PublicContractController {
                         },
                     },
                     items: { orderBy: { position: 'asc' } },
+                    signatureLog: {
+                        select: {
+                            signerName: true,
+                            signerEmail: true,
+                            signedAt: true,
+                            contentHash: true,
+                            signatureImage: true,
+                            ipAddress: true,
+                        },
+                    },
                     user: {
                         select: {
+                            id: true,
                             name: true,
                             email: true,
                             phone: true,
@@ -52,17 +65,7 @@ class PublicContractController {
             if (!contract) {
                 return (0, apiResponse_1.errorResponse)(res, 'NOT_FOUND', 'Umowa nie została znaleziona lub link jest nieaktywny', 404);
             }
-            const seller = {
-                name: contract.user.companyInfo?.name || contract.user.name,
-                email: contract.user.companyInfo?.email || contract.user.email,
-                phone: contract.user.companyInfo?.phone || contract.user.phone,
-                nip: contract.user.companyInfo?.nip || null,
-                address: contract.user.companyInfo?.address || null,
-                city: contract.user.companyInfo?.city || null,
-                postalCode: contract.user.companyInfo?.postalCode || null,
-                website: contract.user.companyInfo?.website || null,
-                logo: contract.user.companyInfo?.logo || null,
-            };
+            const seller = (0, data_mapper_1.mapToPDFUser)(contract.user);
             const items = contract.items.map(item => ({
                 id: item.id,
                 name: item.name,
@@ -98,6 +101,7 @@ class PublicContractController {
                     items,
                     client: contract.client,
                     seller,
+                    signatureLog: contract.signatureLog || null,
                 },
             });
         }
@@ -140,13 +144,10 @@ class PublicContractController {
             }
             const pdfContract = {
                 ...contract,
-                user: {
-                    ...contract.user,
-                    company: contract.user.companyInfo?.name || null,
-                    phone: contract.user.companyInfo?.phone || contract.user.phone,
-                },
+                user: (0, data_mapper_1.mapToPDFUser)(contract.user),
+                client: (0, data_mapper_1.mapToPDFClient)(contract.client),
             };
-            const pdfBuffer = await pdf_service_1.pdfService.generateContractPDF(pdfContract);
+            const pdfBuffer = await pdf_1.pdfService.generateContractPDF(pdfContract);
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', `attachment; filename="umowa-${contract.number.replace(/\//g, '-')}.pdf"`);
             res.setHeader('Content-Length', pdfBuffer.length);
@@ -155,6 +156,37 @@ class PublicContractController {
         catch (error) {
             console.error('[PublicContract] DownloadPdf error:', error);
             return (0, apiResponse_1.errorResponse)(res, 'INTERNAL_ERROR', 'Błąd generowania PDF', 500);
+        }
+    }
+    async signContract(req, res) {
+        try {
+            const { token } = req.params;
+            const { signerName, signerEmail, signatureImage } = req.body;
+            const ipAddress = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
+                || req.socket.remoteAddress
+                || 'unknown';
+            const userAgent = req.headers['user-agent'] || 'unknown';
+            const result = await publicContract_service_1.publicContractService.signContract(token, {
+                signerName,
+                signerEmail,
+                signatureImage,
+                ipAddress,
+                userAgent,
+            });
+            if (result.error) {
+                const statusMap = {
+                    NOT_FOUND: 404,
+                    ALREADY_SIGNED: 409,
+                    INVALID_STATUS: 400,
+                };
+                const status = statusMap[result.error] || 400;
+                return (0, apiResponse_1.errorResponse)(res, result.error, result.message || 'Błąd podpisywania', status);
+            }
+            return (0, apiResponse_1.successResponse)(res, result.data);
+        }
+        catch (error) {
+            console.error('[PublicContract] SignContract error:', error);
+            return (0, apiResponse_1.errorResponse)(res, 'INTERNAL_ERROR', 'Błąd podpisywania umowy', 500);
         }
     }
 }

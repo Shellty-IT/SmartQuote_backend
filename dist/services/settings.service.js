@@ -22,10 +22,10 @@ exports.deleteApiKey = deleteApiKey;
 exports.toggleApiKey = toggleApiKey;
 exports.getAllSettings = getAllSettings;
 const crypto_1 = __importDefault(require("crypto"));
-const prisma_1 = __importDefault(require("../lib/prisma"));
+const prisma_1 = __importDefault(require("@/lib/prisma"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
-const crypto_2 = require("../utils/crypto");
-const email_service_1 = require("./email.service");
+const crypto_2 = require("@/utils/crypto");
+const email_1 = require("./email");
 async function getProfile(userId) {
     const user = await prisma_1.default.user.findUnique({
         where: { id: userId },
@@ -198,7 +198,7 @@ async function deleteSmtpConfig(userId) {
     return { message: 'Konfiguracja SMTP została usunięta' };
 }
 async function testSmtpConnection(config) {
-    return email_service_1.emailService.testConnection(config);
+    return email_1.emailService.testConnection(config);
 }
 async function getDecryptedSmtpConfig(userId) {
     const settings = await prisma_1.default.userSettings.findUnique({

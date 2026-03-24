@@ -1,9 +1,8 @@
 // smartquote_backend/src/controllers/ai.controller.ts
 import { Response } from 'express';
-import { AuthenticatedRequest } from '../types';
-import { aiService } from '../services/ai.service';
-import { successResponse, paginatedResponse, errorResponse } from '../utils/apiResponse';
-import { AISuggestion } from '../types';
+import { AuthenticatedRequest, AISuggestion } from '@/types';
+import { aiService } from '@/services/ai';
+import { successResponse, paginatedResponse, errorResponse } from '@/utils/apiResponse';
 
 export const chat = async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -26,13 +25,13 @@ export const chat = async (req: AuthenticatedRequest, res: Response) => {
 export const generateOffer = async (req: AuthenticatedRequest, res: Response) => {
     try {
         const userId = req.user!.id;
-        const { description, clientId } = req.body;
+        const { description } = req.body;
 
         if (!description) {
             return errorResponse(res, 'VALIDATION_ERROR', 'Opis oferty jest wymagany', 400);
         }
 
-        const offer = await aiService.generateOffer(userId, description, clientId);
+        const offer = await aiService.generateOffer(userId, description);
         return successResponse(res, offer);
     } catch (error: unknown) {
         console.error('Generate Offer Error:', error);
@@ -116,9 +115,14 @@ export const getSuggestions = async (req: AuthenticatedRequest, res: Response) =
             });
         }
 
-        const expiringOffers = context.offers?.filter((o) => {
+        const expiringOffers = context.offers?.filter((o: {
+            status: string;
+            validUntil: Date | null | undefined;
+        }) => {
             if (o.status !== 'SENT' || !o.validUntil) return false;
-            const daysLeft = Math.ceil((new Date(o.validUntil).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+            const daysLeft = Math.ceil(
+                (new Date(o.validUntil).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+            );
             return daysLeft > 0 && daysLeft <= 7;
         });
 
@@ -131,7 +135,7 @@ export const getSuggestions = async (req: AuthenticatedRequest, res: Response) =
             });
         }
 
-        const inactiveClients = context.clients?.filter((c) => !c.isActive);
+        const inactiveClients = context.clients?.filter((c: { isActive: boolean }) => !c.isActive);
         if (inactiveClients && inactiveClients.length > 5) {
             suggestions.push({
                 type: 'tip',
@@ -215,7 +219,14 @@ export const insightsList = async (req: AuthenticatedRequest, res: Response) => 
         const dateTo = req.query.dateTo as string | undefined;
         const search = req.query.search as string | undefined;
 
-        const result = await aiService.getInsightsList(userId, { page, limit, outcome, dateFrom, dateTo, search });
+        const result = await aiService.getInsightsList(userId, {
+            page,
+            limit,
+            outcome,
+            dateFrom,
+            dateTo,
+            search,
+        });
         return paginatedResponse(res, result.data, result.total, page, limit);
     } catch (error: unknown) {
         console.error('Insights List Error:', error);

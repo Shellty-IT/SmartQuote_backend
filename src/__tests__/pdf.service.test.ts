@@ -1,6 +1,6 @@
 // smartquote_backend/src/__tests__/pdf.service.test.ts
 import { Decimal } from '@prisma/client/runtime/library';
-import { pdfService } from '../services/pdf.service';
+import { pdfService } from '../services/pdf';
 
 function d(val: number): Decimal {
     return new Decimal(val);

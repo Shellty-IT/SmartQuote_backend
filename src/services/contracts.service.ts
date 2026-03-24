@@ -7,7 +7,7 @@ import {
     CreateContractInput,
     UpdateContractInput,
     GetContractsParams
-} from '../types';
+} from '@/types';
 
 function toDate(value: Date | string | undefined | null): Date | null {
     if (!value) return null;

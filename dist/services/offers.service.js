@@ -1,82 +1,18 @@
 "use strict";
-// smartquote_backend/src/services/offers.service.ts
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.offersService = exports.OffersService = void 0;
+// smartquote_backend/src/services/offers.service.ts
 const crypto_1 = __importDefault(require("crypto"));
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const offerNumber_1 = require("../utils/offerNumber");
-const library_1 = require("@prisma/client/runtime/library");
-const ai_service_1 = require("./ai.service");
-const email_service_1 = require("./email.service");
+const email_1 = require("@/services/email");
 const settings_service_1 = require("./settings.service");
+const offer_calculations_1 = require("./shared/offer-calculations");
+const postmortem_utils_1 = require("./shared/postmortem.utils");
 class OffersService {
-    triggerPostMortem(userId, offerId, outcome) {
-        ai_service_1.aiService.generatePostMortem(userId, offerId, outcome)
-            .then(() => {
-            console.log(`✅ Post-mortem generated for offer ${offerId} [${outcome}] (manual)`);
-        })
-            .catch((err) => {
-            console.error(`❌ Post-mortem failed for offer ${offerId}:`, err);
-        });
-    }
-    calculateItemTotals(item) {
-        const quantity = new library_1.Decimal(item.quantity);
-        const unitPrice = new library_1.Decimal(item.unitPrice);
-        const vatRate = new library_1.Decimal(item.vatRate || 23);
-        const discount = new library_1.Decimal(item.discount || 0);
-        const discountMultiplier = new library_1.Decimal(1).minus(discount.dividedBy(100));
-        const effectiveUnitPrice = unitPrice.times(discountMultiplier);
-        const totalNet = quantity.times(effectiveUnitPrice);
-        const totalVat = totalNet.times(vatRate.dividedBy(100));
-        const totalGross = totalNet.plus(totalVat);
-        return {
-            totalNet: totalNet.toDecimalPlaces(2),
-            totalVat: totalVat.toDecimalPlaces(2),
-            totalGross: totalGross.toDecimalPlaces(2),
-        };
-    }
-    buildItemWithTotals(item, index) {
-        const totals = this.calculateItemTotals(item);
-        return {
-            name: item.name,
-            description: item.description,
-            quantity: item.quantity,
-            unit: item.unit || 'szt.',
-            unitPrice: item.unitPrice,
-            vatRate: item.vatRate || 23,
-            discount: item.discount || 0,
-            totalNet: totals.totalNet,
-            totalVat: totals.totalVat,
-            totalGross: totals.totalGross,
-            position: index,
-            isOptional: item.isOptional || false,
-            isSelected: true,
-            minQuantity: item.minQuantity || 1,
-            maxQuantity: item.maxQuantity || 100,
-            variantName: item.variantName || null,
-        };
-    }
-    calculateOfferTotals(items) {
-        const baseItems = items.filter((item) => !item.variantName);
-        if (baseItems.length === items.length) {
-            return {
-                totalNet: items.reduce((sum, item) => sum.plus(item.totalNet), new library_1.Decimal(0)),
-                totalVat: items.reduce((sum, item) => sum.plus(item.totalVat), new library_1.Decimal(0)),
-                totalGross: items.reduce((sum, item) => sum.plus(item.totalGross), new library_1.Decimal(0)),
-            };
-        }
-        const variantNames = [...new Set(items.filter((i) => i.variantName).map((i) => i.variantName))];
-        const firstVariantItems = items.filter((i) => i.variantName === variantNames[0]);
-        const allDefaultItems = [...baseItems, ...firstVariantItems];
-        return {
-            totalNet: allDefaultItems.reduce((sum, item) => sum.plus(item.totalNet), new library_1.Decimal(0)),
-            totalVat: allDefaultItems.reduce((sum, item) => sum.plus(item.totalVat), new library_1.Decimal(0)),
-            totalGross: allDefaultItems.reduce((sum, item) => sum.plus(item.totalGross), new library_1.Decimal(0)),
-        };
-    }
     async create(userId, data) {
         const client = await prisma_1.default.client.findFirst({
             where: { id: data.clientId, userId },
@@ -85,8 +21,8 @@ class OffersService {
             throw new Error('CLIENT_NOT_FOUND');
         }
         const number = await (0, offerNumber_1.generateOfferNumber)(userId);
-        const itemsWithTotals = data.items.map((item, index) => this.buildItemWithTotals(item, index));
-        const offerTotals = this.calculateOfferTotals(itemsWithTotals);
+        const itemsWithTotals = data.items.map((item, index) => (0, offer_calculations_1.buildItemWithTotals)(item, index));
+        const offerTotals = (0, offer_calculations_1.calculateOfferTotals)(itemsWithTotals);
         return prisma_1.default.offer.create({
             data: {
                 number,
@@ -218,8 +154,8 @@ class OffersService {
         }
         let result;
         if (data.items && data.items.length > 0) {
-            const itemsWithTotals = data.items.map((item, index) => this.buildItemWithTotals(item, index));
-            const offerTotals = this.calculateOfferTotals(itemsWithTotals);
+            const itemsWithTotals = data.items.map((item, index) => (0, offer_calculations_1.buildItemWithTotals)(item, index));
+            const offerTotals = (0, offer_calculations_1.calculateOfferTotals)(itemsWithTotals);
             result = await prisma_1.default.$transaction(async (tx) => {
                 await tx.offerItem.deleteMany({ where: { offerId: id } });
                 return tx.offer.update({
@@ -254,7 +190,7 @@ class OffersService {
             (data.status === 'ACCEPTED' || data.status === 'REJECTED') &&
             previousStatus !== data.status;
         if (isTerminalChange) {
-            this.triggerPostMortem(userId, id, data.status);
+            (0, postmortem_utils_1.triggerPostMortem)(userId, id, data.status, 'manual');
         }
         return result;
     }
@@ -436,7 +372,7 @@ class OffersService {
             }
             publicUrl = publishResult.publicUrl;
         }
-        const sent = await email_service_1.emailService.sendOfferLink(offer.client.email, {
+        const sent = await email_1.emailService.sendOfferLink(offer.client.email, {
             offerNumber: offer.number,
             offerTitle: offer.title,
             clientName: offer.client.name,
