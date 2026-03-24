@@ -120,14 +120,14 @@ export async function getContractById(id: string, userId: string) {
 export async function createContract(userId: string, data: CreateContractInput) {
     const number = await generateContractNumber(userId);
 
-    const calculatedItems = data.items.map((item, index) => ({
+    const calculatedItems = data.items.map((item: ContractItemInput, index: number) => ({
         ...calculateItem(item),
         position: item.position ?? index,
     }));
 
-    const totalNet = calculatedItems.reduce((sum, item) => sum + item.totalNet, 0);
-    const totalVat = calculatedItems.reduce((sum, item) => sum + item.totalVat, 0);
-    const totalGross = calculatedItems.reduce((sum, item) => sum + item.totalGross, 0);
+    const totalNet = calculatedItems.reduce((sum: number, item: any) => sum + item.totalNet, 0);
+    const totalVat = calculatedItems.reduce((sum: number, item: any) => sum + item.totalVat, 0);
+    const totalGross = calculatedItems.reduce((sum: number, item: any) => sum + item.totalGross, 0);
 
     const contract = await prisma.contract.create({
         data: {
@@ -174,7 +174,7 @@ export async function updateContract(id: string, userId: string, data: UpdateCon
     if (data.items) {
         await prisma.contractItem.deleteMany({ where: { contractId: id } });
 
-        const calculatedItems = data.items.map((item, index) => ({
+        const calculatedItems = data.items.map((item: ContractItemInput, index: number) => ({
             ...calculateItem(item),
             position: item.position ?? index,
         }));
@@ -182,9 +182,9 @@ export async function updateContract(id: string, userId: string, data: UpdateCon
         itemsData = { create: calculatedItems };
 
         totals = {
-            totalNet: calculatedItems.reduce((sum, item) => sum + item.totalNet, 0),
-            totalVat: calculatedItems.reduce((sum, item) => sum + item.totalVat, 0),
-            totalGross: calculatedItems.reduce((sum, item) => sum + item.totalGross, 0),
+            totalNet: calculatedItems.reduce((sum: number, item: any) => sum + item.totalNet, 0),
+            totalVat: calculatedItems.reduce((sum: number, item: any) => sum + item.totalVat, 0),
+            totalGross: calculatedItems.reduce((sum: number, item: any) => sum + item.totalGross, 0),
         };
     }
 

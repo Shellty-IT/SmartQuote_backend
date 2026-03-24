@@ -352,8 +352,7 @@ class PublicOfferService {
                     offerId: offer.id,
                     ipAddress: ipAddress || 'unknown',
                     userAgent: userAgent || 'unknown',
-                    contentHash,
-                    acceptedAt,
+                    contentHash: contentHash || '',
                     acceptedData: {
                         selectedVariant: selectedVariant || null,
                         items: clientSelectedData,
@@ -389,7 +388,7 @@ class PublicOfferService {
                     clientName: clientName || offer.client.name,
                     totalGross: grossValue,
                     currency: offer.currency,
-                    contentHash,
+                    contentHash: contentHash || '',
                     acceptedAt: acceptedAt.toISOString(),
                     selectedVariant: selectedVariant || null,
                     publicToken: token,

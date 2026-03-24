@@ -332,7 +332,7 @@ export async function getApiKeys(userId: string) {
         orderBy: { createdAt: 'desc' },
     });
 
-    return apiKeys.map((key) => ({
+    return apiKeys.map((key: any) => ({
         ...key,
         key: `${key.key.slice(0, 8)}...${key.key.slice(-4)}`,
     }));

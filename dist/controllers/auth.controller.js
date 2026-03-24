@@ -8,7 +8,7 @@ exports.authController = exports.AuthController = void 0;
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const prisma_1 = __importDefault(require("../lib/prisma"));
-const config_1 = require("@/config");
+const config_1 = require("../config");
 const apiResponse_1 = require("@/utils/apiResponse");
 class AuthController {
     async register(req, res) {

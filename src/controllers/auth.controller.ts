@@ -4,7 +4,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import prisma from '../lib/prisma';
-import { config } from '@/config';
+import { config } from '../config';
 import { successResponse, errorResponse } from '@/utils/apiResponse';
 import { AuthenticatedRequest } from '@/types';
 
