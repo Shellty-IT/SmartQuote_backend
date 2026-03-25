@@ -30,7 +30,6 @@ export class ClientsService {
 
         const where: Prisma.ClientWhereInput = { userId };
 
-        // Filtrowanie
         if (query.search) {
             where.OR = [
                 { name: { contains: query.search, mode: 'insensitive' } },
@@ -48,7 +47,6 @@ export class ClientsService {
             where.isActive = query.isActive === 'true';
         }
 
-        // Sortowanie
         const orderBy: Prisma.ClientOrderByWithRelationInput = {};
         const sortBy = query.sortBy || 'createdAt';
         const sortOrder = query.sortOrder || 'desc';
@@ -73,7 +71,6 @@ export class ClientsService {
     }
 
     async update(id: string, userId: string, data: UpdateClientInput) {
-        // Sprawdź czy klient należy do użytkownika
         const existing = await prisma.client.findFirst({
             where: { id, userId },
         });
@@ -89,7 +86,6 @@ export class ClientsService {
     }
 
     async delete(id: string, userId: string) {
-        // Sprawdź czy klient należy do użytkownika
         const existing = await prisma.client.findFirst({
             where: { id, userId },
         });
