@@ -1,11 +1,11 @@
-// smartquote_backend/src/services/settings.service.ts
+// src/services/settings.service.ts
 
 import crypto from 'crypto';
-import prisma from '@/lib/prisma';
+import prisma from '../lib/prisma';
 import bcrypt from 'bcryptjs';
-import { encrypt, decrypt } from '@/utils/crypto';
+import { encrypt, decrypt } from '../utils/crypto';
 import { emailService } from './email';
-import type { SmtpConfig } from '@/types';
+import type { SmtpConfig } from '../types';
 
 export async function getProfile(userId: string) {
     const user = await prisma.user.findUnique({
@@ -332,7 +332,7 @@ export async function getApiKeys(userId: string) {
         orderBy: { createdAt: 'desc' },
     });
 
-    return apiKeys.map((key: any) => ({
+    return apiKeys.map((key: { key: string; id: string; name: string; lastUsedAt: Date | null; expiresAt: Date | null; isActive: boolean; permissions: string[]; createdAt: Date }) => ({
         ...key,
         key: `${key.key.slice(0, 8)}...${key.key.slice(-4)}`,
     }));

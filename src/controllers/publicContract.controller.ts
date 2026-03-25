@@ -1,10 +1,10 @@
 // src/controllers/publicContract.controller.ts
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
-import { pdfService } from '@/services/pdf';
-import { publicContractService } from '@/services/publicContract.service';
-import { successResponse, errorResponse } from '@/utils/apiResponse';
-import { mapToPDFUser, mapToPDFClient } from '@/services/pdf/data-mapper';
+import { pdfService } from '../services/pdf';
+import { publicContractService } from '../services/publicContract.service';
+import { successResponse, errorResponse } from '../utils/apiResponse';
+import { mapToPDFUser, mapToPDFClient } from '../services/pdf/data-mapper';
 
 class PublicContractController {
     async getContract(req: Request<{ token: string }>, res: Response) {

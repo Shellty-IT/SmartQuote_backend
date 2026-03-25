@@ -1,5 +1,4 @@
-// smartquote_backend/src/services/contracts.service.ts
-
+// src/services/contracts.service.ts
 import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import {
@@ -7,7 +6,7 @@ import {
     CreateContractInput,
     UpdateContractInput,
     GetContractsParams
-} from '@/types';
+} from '../types';
 
 function toDate(value: Date | string | undefined | null): Date | null {
     if (!value) return null;
@@ -125,9 +124,9 @@ export async function createContract(userId: string, data: CreateContractInput) 
         position: item.position ?? index,
     }));
 
-    const totalNet = calculatedItems.reduce((sum: number, item: any) => sum + item.totalNet, 0);
-    const totalVat = calculatedItems.reduce((sum: number, item: any) => sum + item.totalVat, 0);
-    const totalGross = calculatedItems.reduce((sum: number, item: any) => sum + item.totalGross, 0);
+    const totalNet = calculatedItems.reduce((sum: number, item: { totalNet: number }) => sum + item.totalNet, 0);
+    const totalVat = calculatedItems.reduce((sum: number, item: { totalVat: number }) => sum + item.totalVat, 0);
+    const totalGross = calculatedItems.reduce((sum: number, item: { totalGross: number }) => sum + item.totalGross, 0);
 
     const contract = await prisma.contract.create({
         data: {
@@ -182,9 +181,9 @@ export async function updateContract(id: string, userId: string, data: UpdateCon
         itemsData = { create: calculatedItems };
 
         totals = {
-            totalNet: calculatedItems.reduce((sum: number, item: any) => sum + item.totalNet, 0),
-            totalVat: calculatedItems.reduce((sum: number, item: any) => sum + item.totalVat, 0),
-            totalGross: calculatedItems.reduce((sum: number, item: any) => sum + item.totalGross, 0),
+            totalNet: calculatedItems.reduce((sum: number, item: { totalNet: number }) => sum + item.totalNet, 0),
+            totalVat: calculatedItems.reduce((sum: number, item: { totalVat: number }) => sum + item.totalVat, 0),
+            totalGross: calculatedItems.reduce((sum: number, item: { totalGross: number }) => sum + item.totalGross, 0),
         };
     }
 
@@ -262,7 +261,7 @@ export async function createContractFromOffer(offerId: string, userId: string) {
 }
 
 export async function getContractsStats(userId: string) {
-    const [total, byStatus, values] = await Promise.all([
+    const [total, byStatus, values, activeContracts] = await Promise.all([
         prisma.contract.count({ where: { userId } }),
         prisma.contract.groupBy({
             by: ['status'],
@@ -290,11 +289,6 @@ export async function getContractsStats(userId: string) {
 
     byStatus.forEach(item => {
         statusCounts[item.status] = item._count.status;
-    });
-
-    const activeContracts = await prisma.contract.aggregate({
-        where: { userId, status: 'ACTIVE' },
-        _sum: { totalGross: true },
     });
 
     return {

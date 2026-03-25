@@ -3,11 +3,11 @@ import '../types';
 import { Request, Response, NextFunction } from 'express';
 import { randomBytes } from 'crypto';
 import contractsService from '../services/contracts.service';
-import { pdfService } from '@/services/pdf';
+import { pdfService } from '../services/pdf';
 import prisma from '../lib/prisma';
-import { successResponse, errorResponse, paginatedResponse } from '@/utils/apiResponse';
+import { successResponse, errorResponse, paginatedResponse } from '../utils/apiResponse';
 import { ContractStatus } from '@prisma/client';
-import { mapToPDFUser, mapToPDFClient } from '@/services/pdf/data-mapper';
+import { mapToPDFUser, mapToPDFClient } from '../services/pdf/data-mapper';
 
 export async function getContracts(req: Request, res: Response, next: NextFunction) {
     try {

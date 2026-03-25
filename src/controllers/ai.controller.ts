@@ -1,8 +1,8 @@
 // smartquote_backend/src/controllers/ai.controller.ts
 import { Response } from 'express';
-import { AuthenticatedRequest, AISuggestion } from '@/types';
-import { aiService } from '@/services/ai';
-import { successResponse, paginatedResponse, errorResponse } from '@/utils/apiResponse';
+import { AuthenticatedRequest, AISuggestion } from '../types';
+import { aiService } from '../services/ai';
+import { successResponse, paginatedResponse, errorResponse } from '../utils/apiResponse';
 
 export const chat = async (req: AuthenticatedRequest, res: Response) => {
     try {

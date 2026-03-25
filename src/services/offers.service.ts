@@ -1,10 +1,10 @@
-// smartquote_backend/src/services/offers.service.ts
+// src/services/offers.service.ts
 import crypto from 'crypto';
 import { Prisma, OfferStatus } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { CreateOfferInput, UpdateOfferInput, PaginationQuery, OfferItemInput } from '../types';
 import { generateOfferNumber } from '../utils/offerNumber';
-import { emailService } from '@/services/email';
+import { emailService } from './email';
 import { getDecryptedSmtpConfig } from './settings.service';
 import { buildItemWithTotals, calculateOfferTotals } from './shared/offer-calculations';
 import { triggerPostMortem } from './shared/postmortem.utils';
