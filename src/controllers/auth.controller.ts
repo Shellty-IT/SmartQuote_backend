@@ -5,8 +5,8 @@ import bcrypt from 'bcrypt';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import prisma from '../lib/prisma';
 import { config } from '../config';
-import { successResponse, errorResponse } from '@/utils/apiResponse';
-import { AuthenticatedRequest } from '@/types';
+import { successResponse, errorResponse } from '../utils/apiResponse';
+import { AuthenticatedRequest } from '../types';
 
 export class AuthController {
     async register(req: Request, res: Response) {
@@ -120,7 +120,6 @@ export class AuthController {
                 return errorResponse(res, 'NOT_FOUND', 'Użytkownik nie znaleziony', 404);
             }
 
-            // Zwróć dane z company z companyInfo dla kompatybilności wstecznej
             const response = {
                 ...user,
                 company: user.companyInfo?.name || null,
