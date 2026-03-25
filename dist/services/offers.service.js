@@ -4,11 +4,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.offersService = exports.OffersService = void 0;
-// smartquote_backend/src/services/offers.service.ts
+// src/services/offers.service.ts
 const crypto_1 = __importDefault(require("crypto"));
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const offerNumber_1 = require("../utils/offerNumber");
-const email_1 = require("@/services/email");
+const email_1 = require("./email");
 const settings_service_1 = require("./settings.service");
 const offer_calculations_1 = require("./shared/offer-calculations");
 const postmortem_utils_1 = require("./shared/postmortem.utils");

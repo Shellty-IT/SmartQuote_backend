@@ -1,5 +1,4 @@
 "use strict";
-// smartquote_backend/src/services/contracts.service.ts
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -232,7 +231,7 @@ async function createContractFromOffer(offerId, userId) {
     return createContract(userId, contractData);
 }
 async function getContractsStats(userId) {
-    const [total, byStatus, values] = await Promise.all([
+    const [total, byStatus, values, activeContracts] = await Promise.all([
         prisma_1.default.contract.count({ where: { userId } }),
         prisma_1.default.contract.groupBy({
             by: ['status'],
@@ -258,10 +257,6 @@ async function getContractsStats(userId) {
     };
     byStatus.forEach(item => {
         statusCounts[item.status] = item._count.status;
-    });
-    const activeContracts = await prisma_1.default.contract.aggregate({
-        where: { userId, status: 'ACTIVE' },
-        _sum: { totalGross: true },
     });
     return {
         total,

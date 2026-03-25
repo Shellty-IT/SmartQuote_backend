@@ -4,13 +4,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.publicOfferService = exports.PublicOfferService = void 0;
-// smartquote_backend/src/services/publicOffer.service.ts
+// src/services/publicOffer.service.ts
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const library_1 = require("@prisma/client/runtime/library");
 const notification_service_1 = require("./notification.service");
 const email_1 = require("./email");
 const settings_service_1 = require("./settings.service");
-const contentHash_1 = require("@/utils/contentHash");
+const contentHash_1 = require("../utils/contentHash");
 const postmortem_utils_1 = require("./shared/postmortem.utils");
 class PublicOfferService {
     sendAcceptanceConfirmationEmail(userId, clientEmail, data) {
@@ -36,10 +36,10 @@ class PublicOfferService {
             }, smtpConfig);
         })
             .then(() => {
-            console.log(`Acceptance confirmation sent to ${clientEmail}`);
+            console.log(`✅ Acceptance confirmation sent to ${clientEmail}`);
         })
             .catch((err) => {
-            console.error('Acceptance confirmation email failed:', err);
+            console.error('❌ Acceptance confirmation email failed:', err);
         });
     }
     async getOfferByToken(token) {
@@ -224,7 +224,7 @@ class PublicOfferService {
                 offerTitle: offer.title,
                 clientName: offer.client.name,
             }).catch((err) => {
-                console.error('Notification failed (offerViewed):', err);
+                console.error('❌ Notification failed (offerViewed):', err);
             });
         }
         return true;
@@ -377,7 +377,7 @@ class PublicOfferService {
             totalGross: grossValue,
             currency: offer.currency,
         }).catch((err) => {
-            console.error('Notification failed (offerAccepted):', err);
+            console.error('❌ Notification failed (offerAccepted):', err);
         });
         if (offer.requireAuditTrail && contentHash) {
             const recipientEmail = clientEmail || offer.client.email;
@@ -464,7 +464,7 @@ class PublicOfferService {
             clientName: offer.client.name,
             reason: reason || undefined,
         }).catch((err) => {
-            console.error('Notification failed (offerRejected):', err);
+            console.error('❌ Notification failed (offerRejected):', err);
         });
         return {
             success: true,
@@ -521,7 +521,7 @@ class PublicOfferService {
             clientName: offer.client.name,
             commentPreview: content,
         }).catch((err) => {
-            console.error('Notification failed (offerComment):', err);
+            console.error('❌ Notification failed (offerComment):', err);
         });
         return {
             comment,

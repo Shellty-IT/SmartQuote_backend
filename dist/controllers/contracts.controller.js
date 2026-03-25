@@ -18,10 +18,10 @@ exports.deleteContract = deleteContract;
 require("../types");
 const crypto_1 = require("crypto");
 const contracts_service_1 = __importDefault(require("../services/contracts.service"));
-const pdf_1 = require("@/services/pdf");
+const pdf_1 = require("../services/pdf");
 const prisma_1 = __importDefault(require("../lib/prisma"));
-const apiResponse_1 = require("@/utils/apiResponse");
-const data_mapper_1 = require("@/services/pdf/data-mapper");
+const apiResponse_1 = require("../utils/apiResponse");
+const data_mapper_1 = require("../services/pdf/data-mapper");
 async function getContracts(req, res, next) {
     try {
         const userId = req.user.id;

@@ -1,5 +1,5 @@
 "use strict";
-// smartquote_backend/src/services/settings.service.ts
+// src/services/settings.service.ts
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -22,9 +22,9 @@ exports.deleteApiKey = deleteApiKey;
 exports.toggleApiKey = toggleApiKey;
 exports.getAllSettings = getAllSettings;
 const crypto_1 = __importDefault(require("crypto"));
-const prisma_1 = __importDefault(require("@/lib/prisma"));
+const prisma_1 = __importDefault(require("../lib/prisma"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
-const crypto_2 = require("@/utils/crypto");
+const crypto_2 = require("../utils/crypto");
 const email_1 = require("./email");
 async function getProfile(userId) {
     const user = await prisma_1.default.user.findUnique({

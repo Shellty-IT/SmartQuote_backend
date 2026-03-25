@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.insightsList = exports.latestInsights = exports.closingStrategy = exports.observerInsight = exports.priceInsight = exports.getSuggestions = exports.clearHistory = exports.analyzeClient = exports.generateEmail = exports.generateOffer = exports.chat = void 0;
-const ai_1 = require("@/services/ai");
-const apiResponse_1 = require("@/utils/apiResponse");
+const ai_1 = require("../services/ai");
+const apiResponse_1 = require("../utils/apiResponse");
 const chat = async (req, res) => {
     try {
         const userId = req.user.id;

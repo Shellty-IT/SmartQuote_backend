@@ -29,7 +29,6 @@ class ClientsService {
         const limit = parseInt(query.limit || '20', 10);
         const skip = (page - 1) * limit;
         const where = { userId };
-        // Filtrowanie
         if (query.search) {
             where.OR = [
                 { name: { contains: query.search, mode: 'insensitive' } },
@@ -44,7 +43,6 @@ class ClientsService {
         if (query.isActive !== undefined) {
             where.isActive = query.isActive === 'true';
         }
-        // Sortowanie
         const orderBy = {};
         const sortBy = query.sortBy || 'createdAt';
         const sortOrder = query.sortOrder || 'desc';
@@ -66,7 +64,6 @@ class ClientsService {
         return { clients, total, page, limit };
     }
     async update(id, userId, data) {
-        // Sprawdź czy klient należy do użytkownika
         const existing = await prisma_1.default.client.findFirst({
             where: { id, userId },
         });
@@ -79,7 +76,6 @@ class ClientsService {
         });
     }
     async delete(id, userId) {
-        // Sprawdź czy klient należy do użytkownika
         const existing = await prisma_1.default.client.findFirst({
             where: { id, userId },
         });

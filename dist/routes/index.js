@@ -1,9 +1,9 @@
 "use strict";
+// src/routes/index.ts
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-// smartquote_backend/src/routes/index.ts
 const express_1 = require("express");
 const auth_routes_1 = __importDefault(require("./auth.routes"));
 const publicOffer_routes_1 = __importDefault(require("./publicOffer.routes"));
@@ -16,6 +16,7 @@ const followups_routes_1 = __importDefault(require("./followups.routes"));
 const ai_routes_1 = __importDefault(require("./ai.routes"));
 const settings_routes_1 = __importDefault(require("./settings.routes"));
 const notifications_routes_1 = __importDefault(require("./notifications.routes"));
+const ksef_bridge_routes_1 = __importDefault(require("./ksef-bridge.routes"));
 const followupReminder_service_1 = require("../services/followupReminder.service");
 const router = (0, express_1.Router)();
 router.use('/auth', auth_routes_1.default);
@@ -29,6 +30,7 @@ router.use('/followups', followups_routes_1.default);
 router.use('/ai', ai_routes_1.default);
 router.use('/settings', settings_routes_1.default);
 router.use('/notifications', notifications_routes_1.default);
+router.use('/ksef', ksef_bridge_routes_1.default);
 router.get('/health', (req, res) => {
     followupReminder_service_1.followUpReminderService.tryPeriodicCheck().catch((err) => {
         console.error('❌ Pseudo-cron follow-up check failed:', err);

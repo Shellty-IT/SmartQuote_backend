@@ -5,10 +5,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.publicContractController = void 0;
 const prisma_1 = __importDefault(require("../lib/prisma"));
-const pdf_1 = require("@/services/pdf");
-const publicContract_service_1 = require("@/services/publicContract.service");
-const apiResponse_1 = require("@/utils/apiResponse");
-const data_mapper_1 = require("@/services/pdf/data-mapper");
+const pdf_1 = require("../services/pdf");
+const publicContract_service_1 = require("../services/publicContract.service");
+const apiResponse_1 = require("../utils/apiResponse");
+const data_mapper_1 = require("../services/pdf/data-mapper");
 class PublicContractController {
     async getContract(req, res) {
         try {

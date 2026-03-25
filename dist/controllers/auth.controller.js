@@ -9,7 +9,7 @@ const bcrypt_1 = __importDefault(require("bcrypt"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const config_1 = require("../config");
-const apiResponse_1 = require("@/utils/apiResponse");
+const apiResponse_1 = require("../utils/apiResponse");
 class AuthController {
     async register(req, res) {
         try {
@@ -102,7 +102,6 @@ class AuthController {
             if (!user) {
                 return (0, apiResponse_1.errorResponse)(res, 'NOT_FOUND', 'Użytkownik nie znaleziony', 404);
             }
-            // Zwróć dane z company z companyInfo dla kompatybilności wstecznej
             const response = {
                 ...user,
                 company: user.companyInfo?.name || null,
