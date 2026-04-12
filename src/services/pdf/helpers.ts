@@ -1,6 +1,8 @@
 // smartquote_backend/src/services/pdf/helpers.ts
 import PDFDocument from 'pdfkit';
 import { Decimal } from '@prisma/client/runtime/library';
+import path from 'path';
+import fs from 'fs';
 
 interface TableItem {
     name: string;
@@ -15,41 +17,76 @@ interface TableItem {
     variantName?: string | null;
 }
 
-const plMap: Record<string, string> = {
-    'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z',
-    'Ą': 'A', 'Ć': 'C', 'Ę': 'E', 'Ł': 'L', 'Ń': 'N', 'Ó': 'O', 'Ś': 'S', 'Ź': 'Z', 'Ż': 'Z'
-};
+export function createDoc(): PDFKit.PDFDocument {
+    const doc = new PDFDocument({
+        size: 'A4',
+        margins: { top: 40, bottom: 80, left: 40, right: 40 },
+        layout: 'portrait',
+    });
 
-export const pl = (str: string): string => {
-    return str.replace(/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/g, c => plMap[c] || c);
-};
+    const fontPaths = [
+        path.join(process.cwd(), 'fonts', 'DejaVuSans.ttf'),
+        path.join(__dirname, '..', '..', '..', 'fonts', 'DejaVuSans.ttf'),
+        path.join(__dirname, '..', '..', '..', '..', 'fonts', 'DejaVuSans.ttf'),
+    ];
+    const boldFontPaths = [
+        path.join(process.cwd(), 'fonts', 'DejaVuSans-Bold.ttf'),
+        path.join(__dirname, '..', '..', '..', 'fonts', 'DejaVuSans-Bold.ttf'),
+        path.join(__dirname, '..', '..', '..', '..', 'fonts', 'DejaVuSans-Bold.ttf'),
+    ];
 
-export const txt = (text: string | null | undefined): string => text ? pl(text) : '';
+    const regularFont = fontPaths.find(p => fs.existsSync(p));
+    const boldFont = boldFontPaths.find(p => fs.existsSync(p));
+
+    if (regularFont && boldFont) {
+        doc.registerFont('Regular', regularFont);
+        doc.registerFont('Bold', boldFont);
+        doc.registerFont('Mono', regularFont);
+    } else {
+        doc.registerFont('Regular', 'Helvetica');
+        doc.registerFont('Bold', 'Helvetica-Bold');
+        doc.registerFont('Mono', 'Courier');
+    }
+
+    return doc;
+}
+
+export const txt = (text: string | null | undefined): string => text ?? '';
 
 export const money = (amount: Decimal | number, cur = 'PLN'): string => {
     const n = typeof amount === 'number' ? amount : Number(amount);
-    return n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + cur;
+    return n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' ' + cur;
 };
 
 export const date = (d: Date | string | null): string => {
     if (!d) return '-';
-    return new Date(d).toLocaleDateString('pl-PL');
+    const dt = new Date(d);
+    const day = String(dt.getDate()).padStart(2, '0');
+    const month = String(dt.getMonth() + 1).padStart(2, '0');
+    const year = dt.getFullYear();
+    return `${day}.${month}.${year}`;
 };
 
 export const dateTime = (d: Date | string | null): string => {
     if (!d) return '-';
     const dt = new Date(d);
-    return dt.toLocaleDateString('pl-PL') + ' ' + dt.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const day = String(dt.getDate()).padStart(2, '0');
+    const month = String(dt.getMonth() + 1).padStart(2, '0');
+    const year = dt.getFullYear();
+    const h = String(dt.getHours()).padStart(2, '0');
+    const m = String(dt.getMinutes()).padStart(2, '0');
+    const s = String(dt.getSeconds()).padStart(2, '0');
+    return `${day}.${month}.${year} ${h}:${m}:${s}`;
 };
 
 export const statusMap: Record<string, string> = {
-    DRAFT: 'Szkic', SENT: 'Wysłana', VIEWED: 'Wyświetlona', NEGOTIATION: 'Negocjacje',
-    ACCEPTED: 'Zaakceptowana', REJECTED: 'Odrzucona', EXPIRED: 'Wygasła'
+    DRAFT: 'Szkic', SENT: 'Wyslana', VIEWED: 'Wyswietlona', NEGOTIATION: 'Negocjacje',
+    ACCEPTED: 'Zaakceptowana', REJECTED: 'Odrzucona', EXPIRED: 'Wygasla'
 };
 
 export const contractStatusMap: Record<string, string> = {
     DRAFT: 'Szkic', PENDING_SIGNATURE: 'Do podpisu', ACTIVE: 'Aktywna',
-    COMPLETED: 'Zakończona', TERMINATED: 'Rozwiązana', EXPIRED: 'Wygasła'
+    COMPLETED: 'Zakonczona', TERMINATED: 'Rozwiazana', EXPIRED: 'Wygasla'
 };
 
 export function groupItemsByVariant(items: TableItem[]): Array<{
@@ -108,13 +145,13 @@ export function renderItemsTable(
 ): number {
     let Y = startY;
     const cols = [22, 175, 40, 30, 58, 35, 35, 70];
-    const headers = ['Lp', 'Nazwa', 'Ilość', 'Jm', 'Cena', 'VAT', 'Rabat', 'Netto'];
+    const headers = ['Lp', 'Nazwa', 'Ilosc', 'Jm', 'Cena', 'VAT', 'Rabat', 'Netto'];
     const tW = cols.reduce((a, b) => a + b, 0);
     const tX = L + (W - tW) / 2;
 
     doc.rect(tX, Y, tW, 18).fill(accentColor);
     let x = tX;
-    doc.font('Helvetica-Bold').fontSize(7).fillColor('#fff');
+    doc.font('Bold').fontSize(7).fillColor('#fff');
     headers.forEach((h, i) => {
         doc.text(h, x + 2, Y + 5, { width: cols[i] - 4, align: 'center' });
         x += cols[i];
@@ -148,13 +185,34 @@ export function renderItemsTable(
         ];
 
         x = tX;
-        doc.font('Helvetica').fontSize(7).fillColor('#1e293b');
+        doc.font('Regular').fontSize(7).fillColor('#1e293b');
         row.forEach((v, i) => {
-            doc.text(v, x + 2, Y + 4, { width: cols[i] - 4, align: i === 1 ? 'left' : 'center' });
+            const align: 'center' | 'right' = i === 1 ? 'center' : 'center';
+            doc.text(v, x + 2, Y + 4, { width: cols[i] - 4, align: i === 1 ? 'center' : 'right' });
+            void align;
             x += cols[i];
         });
         Y += 16;
     });
 
     return Y;
+}
+
+export function tryRenderLogo(
+    doc: PDFKit.PDFDocument,
+    logoBase64: string | null | undefined,
+    x: number,
+    y: number,
+    maxW: number,
+    maxH: number
+): boolean {
+    if (!logoBase64) return false;
+    try {
+        const base64Data = logoBase64.replace(/^data:image\/\w+;base64,/, '');
+        const imgBuffer = Buffer.from(base64Data, 'base64');
+        doc.image(imgBuffer, x, y, { fit: [maxW, maxH] });
+        return true;
+    } catch {
+        return false;
+    }
 }

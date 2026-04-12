@@ -13,6 +13,7 @@ import aiRoutes from './ai.routes';
 import settingsRoutes from './settings.routes';
 import notificationsRoutes from './notifications.routes';
 import ksefBridgeRoutes from './ksef-bridge.routes';
+import emailComposerRoutes from './email-composer.routes';
 import { followUpReminderService } from '../services/followupReminder.service';
 
 const router = Router();
@@ -30,6 +31,7 @@ router.use('/ai', aiRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/notifications', notificationsRoutes);
 router.use('/ksef', ksefBridgeRoutes);
+router.use('/emails', emailComposerRoutes);
 
 router.get('/health', (req, res) => {
     followUpReminderService.tryPeriodicCheck().catch((err: unknown) => {

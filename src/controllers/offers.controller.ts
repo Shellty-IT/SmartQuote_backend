@@ -1,5 +1,4 @@
-// smartquote_backend/src/controllers/offers.controller.ts
-
+// src/controllers/offers.controller.ts
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../types';
 import { offersService } from '../services/offers.service';
@@ -13,7 +12,6 @@ export class OffersController {
             const offer = await offersService.create(req.user!.id, req.body);
             return successResponse(res, offer, 201);
         } catch (error: unknown) {
-            console.error('[Offers] Create error:', error);
             if (error instanceof Error && error.message === 'CLIENT_NOT_FOUND') {
                 return errorResponse(res, 'CLIENT_NOT_FOUND', 'Klient nie znaleziony', 404);
             }
@@ -29,7 +27,6 @@ export class OffersController {
             }
             return successResponse(res, offer);
         } catch (error: unknown) {
-            console.error('[Offers] FindById error:', error);
             return errorResponse(res, 'FETCH_FAILED', 'Nie udało się pobrać oferty', 500);
         }
     }
@@ -42,7 +39,6 @@ export class OffersController {
             );
             return paginatedResponse(res, offers, total, page, limit);
         } catch (error: unknown) {
-            console.error('[Offers] FindAll error:', error);
             return errorResponse(res, 'FETCH_FAILED', 'Nie udało się pobrać listy ofert', 500);
         }
     }
@@ -55,7 +51,6 @@ export class OffersController {
             }
             return successResponse(res, offer);
         } catch (error: unknown) {
-            console.error('[Offers] Update error:', error);
             return errorResponse(res, 'UPDATE_FAILED', 'Nie udało się zaktualizować oferty', 500);
         }
     }
@@ -68,7 +63,6 @@ export class OffersController {
             }
             return successResponse(res, { message: 'Oferta usunięta' });
         } catch (error: unknown) {
-            console.error('[Offers] Delete error:', error);
             return errorResponse(res, 'DELETE_FAILED', 'Nie udało się usunąć oferty', 500);
         }
     }
@@ -78,7 +72,6 @@ export class OffersController {
             const stats = await offersService.getStats(req.user!.id);
             return successResponse(res, stats);
         } catch (error: unknown) {
-            console.error('[Offers] Stats error:', error);
             return errorResponse(res, 'STATS_FAILED', 'Nie udało się pobrać statystyk', 500);
         }
     }
@@ -91,7 +84,6 @@ export class OffersController {
             }
             return successResponse(res, offer, 201);
         } catch (error: unknown) {
-            console.error('[Offers] Duplicate error:', error);
             return errorResponse(res, 'DUPLICATE_FAILED', 'Nie udało się skopiować oferty', 500);
         }
     }
@@ -105,9 +97,7 @@ export class OffersController {
                 where: { id, userId },
                 include: {
                     client: true,
-                    items: {
-                        orderBy: { position: 'asc' },
-                    },
+                    items: { orderBy: { position: 'asc' } },
                     acceptanceLog: true,
                     user: {
                         select: {
@@ -124,6 +114,7 @@ export class OffersController {
                                     postalCode: true,
                                     phone: true,
                                     email: true,
+                                    logo: true,
                                 },
                             },
                         },
@@ -138,9 +129,16 @@ export class OffersController {
             const pdfOffer = {
                 ...offer,
                 user: {
-                    ...offer.user,
-                    company: offer.user.companyInfo?.name || null,
+                    id: offer.user.id,
+                    email: offer.user.email,
+                    name: offer.user.name,
                     phone: offer.user.companyInfo?.phone || offer.user.phone,
+                    company: offer.user.companyInfo?.name || null,
+                    nip: offer.user.companyInfo?.nip || null,
+                    address: offer.user.companyInfo?.address || null,
+                    city: offer.user.companyInfo?.city || null,
+                    postalCode: offer.user.companyInfo?.postalCode || null,
+                    logo: offer.user.companyInfo?.logo || null,
                 },
             };
 
@@ -153,7 +151,6 @@ export class OffersController {
 
             return res.send(pdfBuffer);
         } catch (error: unknown) {
-            console.error('[Offers] GeneratePDF error:', error);
             return errorResponse(res, 'PDF_FAILED', 'Nie udało się wygenerować PDF', 500);
         }
     }
@@ -166,7 +163,6 @@ export class OffersController {
             }
             return successResponse(res, result);
         } catch (error: unknown) {
-            console.error('[Offers] Publish error:', error);
             return errorResponse(res, 'PUBLISH_FAILED', 'Nie udało się opublikować oferty', 500);
         }
     }
@@ -179,7 +175,6 @@ export class OffersController {
             }
             return successResponse(res, { unpublished: true });
         } catch (error: unknown) {
-            console.error('[Offers] Unpublish error:', error);
             return errorResponse(res, 'UNPUBLISH_FAILED', 'Nie udało się dezaktywować linku', 500);
         }
     }
@@ -192,7 +187,6 @@ export class OffersController {
             }
             return successResponse(res, analytics);
         } catch (error: unknown) {
-            console.error('[Offers] Analytics error:', error);
             return errorResponse(res, 'ANALYTICS_FAILED', 'Nie udało się pobrać analityki', 500);
         }
     }
@@ -205,7 +199,6 @@ export class OffersController {
             }
             return successResponse(res, comments);
         } catch (error: unknown) {
-            console.error('[Offers] GetComments error:', error);
             return errorResponse(res, 'FETCH_FAILED', 'Nie udało się pobrać komentarzy', 500);
         }
     }
@@ -219,7 +212,6 @@ export class OffersController {
             }
             return successResponse(res, comment, 201);
         } catch (error: unknown) {
-            console.error('[Offers] AddComment error:', error);
             return errorResponse(res, 'COMMENT_FAILED', 'Nie udało się dodać komentarza', 500);
         }
     }
@@ -229,8 +221,6 @@ export class OffersController {
             const result = await offersService.sendOfferToClient(req.params.id, req.user!.id);
             return successResponse(res, result);
         } catch (error: unknown) {
-            console.error('[Offers] SendToClient error:', error);
-
             if (error instanceof Error) {
                 const errorMap: Record<string, { code: string; message: string; status: number }> = {
                     OFFER_NOT_FOUND: { code: 'NOT_FOUND', message: 'Oferta nie znaleziona', status: 404 },
@@ -244,7 +234,6 @@ export class OffersController {
                     return errorResponse(res, mapped.code, mapped.message, mapped.status);
                 }
             }
-
             return errorResponse(res, 'SEND_FAILED', 'Nie udało się wysłać oferty do klienta', 500);
         }
     }

@@ -39,6 +39,11 @@ export function mapToPDFUser(user: UserWithCompany): PDFUser {
         name: user.name,
         phone: user.companyInfo?.phone || user.phone,
         company: user.companyInfo?.name || null,
+        nip: user.companyInfo?.nip || null,
+        address: user.companyInfo?.address || null,
+        city: user.companyInfo?.city || null,
+        postalCode: user.companyInfo?.postalCode || null,
+        logo: user.companyInfo?.logo || null,
     };
 }
 

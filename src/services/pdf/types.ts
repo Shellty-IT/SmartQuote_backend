@@ -1,4 +1,4 @@
-// src/services/pdf/types.ts
+// smartquote_backend/src/services/pdf/types.ts
 import { Decimal } from '@prisma/client/runtime/library';
 
 export interface PDFClient {
@@ -49,6 +49,11 @@ export interface PDFUser {
     name: string | null;
     company: string | null;
     phone: string | null;
+    nip: string | null;
+    address: string | null;
+    city: string | null;
+    postalCode: string | null;
+    logo: string | null;
 }
 
 export interface PDFAcceptanceLog {
@@ -131,4 +136,3 @@ export interface VariantGroup {
     totalVat: Decimal;
     totalGross: Decimal;
 }
-

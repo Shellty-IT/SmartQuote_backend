@@ -107,7 +107,6 @@ class PublicContractController {
                 },
             });
         } catch (error: unknown) {
-            console.error('[PublicContract] GetContract error:', error);
             return errorResponse(res, 'INTERNAL_ERROR', 'Błąd serwera', 500);
         }
     }
@@ -121,6 +120,7 @@ class PublicContractController {
                 include: {
                     client: true,
                     items: { orderBy: { position: 'asc' } },
+                    signatureLog: true,
                     user: {
                         select: {
                             id: true,
@@ -136,6 +136,7 @@ class PublicContractController {
                                     postalCode: true,
                                     phone: true,
                                     email: true,
+                                    logo: true,
                                 },
                             },
                         },
@@ -161,7 +162,6 @@ class PublicContractController {
 
             return res.send(pdfBuffer);
         } catch (error: unknown) {
-            console.error('[PublicContract] DownloadPdf error:', error);
             return errorResponse(res, 'INTERNAL_ERROR', 'Błąd generowania PDF', 500);
         }
     }
@@ -196,7 +196,6 @@ class PublicContractController {
 
             return successResponse(res, result.data);
         } catch (error: unknown) {
-            console.error('[PublicContract] SignContract error:', error);
             return errorResponse(res, 'INTERNAL_ERROR', 'Błąd podpisywania umowy', 500);
         }
     }

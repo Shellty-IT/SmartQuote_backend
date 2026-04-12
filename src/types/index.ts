@@ -1,10 +1,9 @@
-// smartquote_backend/src/types/index.ts
-
+// src/types/index.ts
 import { Request } from 'express';
 import {
     FollowUpType,
     FollowUpStatus,
-    Priority
+    Priority,
 } from '@prisma/client';
 
 declare global {
@@ -357,4 +356,62 @@ export interface SmtpConfig {
     user: string;
     pass: string;
     from: string;
+}
+
+export type EmailLogStatus = 'SENT' | 'FAILED' | 'DRAFT';
+
+export interface SendEmailInput {
+    to: string;
+    toName?: string;
+    subject: string;
+    body: string;
+    clientId?: string;
+    offerId?: string;
+    contractId?: string;
+    templateId?: string;
+    templateName?: string;
+    attachments?: EmailAttachment[];
+    saveAsDraft?: boolean;
+}
+
+export interface UpdateDraftInput {
+    to?: string;
+    toName?: string;
+    subject?: string;
+    body?: string;
+    clientId?: string;
+    offerId?: string;
+    contractId?: string;
+    templateId?: string;
+    templateName?: string;
+    attachments?: EmailAttachment[];
+}
+
+export interface EmailAttachment {
+    type: 'offer_pdf' | 'contract_pdf' | 'offer_link' | 'contract_link';
+    resourceId: string;
+    name: string;
+}
+
+export interface CreateEmailTemplateInput {
+    name: string;
+    subject: string;
+    body: string;
+}
+
+export interface UpdateEmailTemplateInput {
+    name?: string;
+    subject?: string;
+    body?: string;
+}
+
+export interface GetEmailLogsParams {
+    userId: string;
+    page?: number;
+    limit?: number;
+    status?: EmailLogStatus;
+    clientId?: string;
+    offerId?: string;
+    contractId?: string;
+    search?: string;
 }

@@ -75,6 +75,7 @@ export async function generateContractPDF(req: Request, res: Response, next: Nex
             include: {
                 client: true,
                 items: { orderBy: { position: 'asc' } },
+                signatureLog: true,
                 user: {
                     select: {
                         id: true,
@@ -90,6 +91,7 @@ export async function generateContractPDF(req: Request, res: Response, next: Nex
                                 postalCode: true,
                                 phone: true,
                                 email: true,
+                                logo: true,
                             },
                         },
                     },
