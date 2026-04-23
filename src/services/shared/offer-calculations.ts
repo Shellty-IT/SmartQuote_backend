@@ -1,4 +1,5 @@
-// smartquote_backend/src/services/shared/offer-calculations.ts
+// src/services/shared/offer-calculations.ts
+
 import { Decimal } from '@prisma/client/runtime/library';
 import { OfferItemInput } from '../../types';
 
@@ -17,7 +18,7 @@ interface ItemTotals {
 
 export interface ItemWithTotals {
     readonly name: string;
-    readonly description: string | undefined;
+    readonly description?: string | null;
     readonly quantity: number;
     readonly unit: string;
     readonly unitPrice: number;
@@ -29,8 +30,8 @@ export interface ItemWithTotals {
     readonly position: number;
     readonly isOptional: boolean;
     readonly isSelected: boolean;
-    readonly minQuantity: number;
-    readonly maxQuantity: number;
+    readonly minQuantity?: number | null;
+    readonly maxQuantity?: number | null;
     readonly variantName: string | null;
 }
 
@@ -58,7 +59,7 @@ export function buildItemWithTotals(item: OfferItemInput, index: number): ItemWi
     const totals = calculateItemTotals(item);
     return {
         name: item.name,
-        description: item.description,
+        description: item.description ?? null,
         quantity: item.quantity,
         unit: item.unit || 'szt.',
         unitPrice: item.unitPrice,
@@ -70,8 +71,8 @@ export function buildItemWithTotals(item: OfferItemInput, index: number): ItemWi
         position: index,
         isOptional: item.isOptional || false,
         isSelected: true,
-        minQuantity: item.minQuantity || 1,
-        maxQuantity: item.maxQuantity || 100,
+        minQuantity: item.minQuantity ?? null,
+        maxQuantity: item.maxQuantity ?? null,
         variantName: item.variantName || null,
     };
 }

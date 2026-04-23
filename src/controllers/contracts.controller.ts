@@ -1,26 +1,24 @@
 // src/controllers/contracts.controller.ts
-import '../types';
+
 import { Request, Response, NextFunction } from 'express';
 import { randomBytes } from 'crypto';
 import contractsService from '../services/contracts.service';
+import { contractsRepository } from '../repositories/contracts.repository';
 import { pdfService } from '../services/pdf';
-import prisma from '../lib/prisma';
 import { successResponse, errorResponse, paginatedResponse } from '../utils/apiResponse';
-import { ContractStatus } from '@prisma/client';
 import { mapToPDFUser, mapToPDFClient } from '../services/pdf/data-mapper';
+import { NotFoundError } from '../errors/domain.errors';
+import { ContractStatus } from '@prisma/client';
 
 export async function getContracts(req: Request, res: Response, next: NextFunction) {
     try {
         const userId = req.user!.id;
         const { page, limit, status, clientId, search } = req.query;
 
-        const pageNum = page ? parseInt(page as string) : 1;
-        const limitNum = limit ? parseInt(limit as string) : 10;
-
         const result = await contractsService.getContracts({
             userId,
-            page: pageNum,
-            limit: limitNum,
+            page: page ? parseInt(page as string) : 1,
+            limit: limit ? parseInt(limit as string) : 10,
             status: status as ContractStatus | undefined,
             clientId: clientId as string | undefined,
             search: search as string | undefined,
@@ -31,184 +29,135 @@ export async function getContracts(req: Request, res: Response, next: NextFuncti
             result.data,
             result.pagination.total,
             result.pagination.page,
-            result.pagination.limit
+            result.pagination.limit,
         );
-    } catch (error) {
-        next(error);
+    } catch (err) {
+        next(err);
     }
 }
 
 export async function getContractsStats(req: Request, res: Response, next: NextFunction) {
     try {
-        const userId = req.user!.id;
-        const stats = await contractsService.getContractsStats(userId);
+        const stats = await contractsService.getContractsStats(req.user!.id);
         return successResponse(res, stats);
-    } catch (error) {
-        next(error);
+    } catch (err) {
+        next(err);
     }
 }
 
 export async function getContractById(req: Request, res: Response, next: NextFunction) {
     try {
-        const userId = req.user!.id;
-        const { id } = req.params;
-
-        const contract = await contractsService.getContractById(id, userId);
-
-        if (!contract) {
-            return errorResponse(res, 'NOT_FOUND', 'Umowa nie znaleziona', 404);
-        }
-
+        const contract = await contractsService.getContractById(req.params.id, req.user!.id);
+        if (!contract) throw new NotFoundError('Umowa');
         return successResponse(res, contract);
-    } catch (error) {
-        next(error);
+    } catch (err) {
+        next(err);
     }
 }
 
 export async function generateContractPDF(req: Request, res: Response, next: NextFunction) {
     try {
-        const userId = req.user!.id;
         const { id } = req.params;
+        const userId = req.user!.id;
 
-        const contract = await prisma.contract.findFirst({
-            where: { id, userId },
-            include: {
-                client: true,
-                items: { orderBy: { position: 'asc' } },
-                signatureLog: true,
-                user: {
-                    select: {
-                        id: true,
-                        email: true,
-                        name: true,
-                        phone: true,
-                        companyInfo: {
-                            select: {
-                                name: true,
-                                nip: true,
-                                address: true,
-                                city: true,
-                                postalCode: true,
-                                phone: true,
-                                email: true,
-                                logo: true,
-                            },
-                        },
-                    },
-                },
-            },
-        });
-
-        if (!contract) {
-            return errorResponse(res, 'NOT_FOUND', 'Umowa nie znaleziona', 404);
-        }
+        const contract = await contractsRepository.findByIdWithUser(id, userId);
+        if (!contract) throw new NotFoundError('Umowa');
 
         const pdfContract = {
             ...contract,
-            user: mapToPDFUser(contract.user),
+            user: mapToPDFUser({
+                id: contract.user.id,
+                email: contract.user.email,
+                name: contract.user.name,
+                phone: contract.user.companyInfo?.phone ?? contract.user.phone,
+                companyInfo: contract.user.companyInfo,
+            }),
             client: mapToPDFClient(contract.client),
         };
 
-        const pdfBuffer = await pdfService.generateContractPDF(pdfContract as any);
+        const pdfBuffer = await pdfService.generateContractPDF(
+            pdfContract as Parameters<typeof pdfService.generateContractPDF>[0],
+        );
 
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="umowa-${contract.number.replace(/\//g, '-')}.pdf"`);
+        res.setHeader(
+            'Content-Disposition',
+            `attachment; filename="umowa-${contract.number.replace(/\//g, '-')}.pdf"`,
+        );
         res.setHeader('Content-Length', pdfBuffer.length);
 
         return res.send(pdfBuffer);
-    } catch (error) {
-        next(error);
+    } catch (err) {
+        next(err);
     }
 }
 
 export async function createContract(req: Request, res: Response, next: NextFunction) {
     try {
-        const userId = req.user!.id;
-        const contract = await contractsService.createContract(userId, req.body);
+        const contract = await contractsService.createContract(req.user!.id, req.body);
         return successResponse(res, contract, 201);
-    } catch (error) {
-        next(error);
+    } catch (err) {
+        next(err);
     }
 }
 
 export async function createContractFromOffer(req: Request, res: Response, next: NextFunction) {
     try {
-        const userId = req.user!.id;
-        const { offerId } = req.params;
-
-        const contract = await contractsService.createContractFromOffer(offerId, userId);
-
-        if (!contract) {
-            return errorResponse(res, 'NOT_FOUND', 'Oferta nie znaleziona', 404);
-        }
-
+        const contract = await contractsService.createContractFromOffer(
+            req.params.offerId,
+            req.user!.id,
+        );
         return successResponse(res, contract, 201);
-    } catch (error) {
-        next(error);
+    } catch (err) {
+        next(err);
     }
 }
 
 export async function updateContract(req: Request, res: Response, next: NextFunction) {
     try {
-        const userId = req.user!.id;
-        const { id } = req.params;
-
-        const contract = await contractsService.updateContract(id, userId, req.body);
-
-        if (!contract) {
-            return errorResponse(res, 'NOT_FOUND', 'Umowa nie znaleziona', 404);
-        }
-
+        const contract = await contractsService.updateContract(
+            req.params.id,
+            req.user!.id,
+            req.body,
+        );
         return successResponse(res, contract);
-    } catch (error) {
-        next(error);
+    } catch (err) {
+        next(err);
     }
 }
 
 export async function updateContractStatus(req: Request, res: Response, next: NextFunction) {
     try {
-        const userId = req.user!.id;
         const { id } = req.params;
-        const { status } = req.body;
+        const { status } = req.body as { status: ContractStatus };
 
-        const updateData: { status: ContractStatus; signedAt?: Date; sentAt?: Date } = { status };
+        const updateData: {
+            status: ContractStatus;
+            signedAt?: Date;
+            sentAt?: Date;
+        } = { status };
 
-        if (status === 'ACTIVE') {
-            updateData.signedAt = new Date();
-        }
+        if (status === 'ACTIVE') updateData.signedAt = new Date();
+        if (status === 'PENDING_SIGNATURE') updateData.sentAt = new Date();
 
-        if (status === 'PENDING_SIGNATURE') {
-            updateData.sentAt = new Date();
-        }
-
-        const contract = await contractsService.updateContract(id, userId, updateData);
-
-        if (!contract) {
-            return errorResponse(res, 'NOT_FOUND', 'Umowa nie znaleziona', 404);
-        }
-
+        const contract = await contractsService.updateContract(id, req.user!.id, updateData);
         return successResponse(res, contract);
-    } catch (error) {
-        next(error);
+    } catch (err) {
+        next(err);
     }
 }
 
 export async function publishContract(req: Request, res: Response, next: NextFunction) {
     try {
-        const userId = req.user!.id;
         const { id } = req.params;
+        const userId = req.user!.id;
 
-        const contract = await prisma.contract.findFirst({
-            where: { id, userId },
-            select: { id: true, publicToken: true },
-        });
+        const contract = await contractsRepository.findPublicToken(id, userId);
+        if (!contract) throw new NotFoundError('Umowa');
 
-        if (!contract) {
-            return errorResponse(res, 'NOT_FOUND', 'Umowa nie znaleziona', 404);
-        }
+        const frontendUrl = (process.env.FRONTEND_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 
         if (contract.publicToken) {
-            const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
             return successResponse(res, {
                 publicToken: contract.publicToken,
                 publicUrl: `${frontendUrl}/contract/view/${contract.publicToken}`,
@@ -218,61 +167,40 @@ export async function publishContract(req: Request, res: Response, next: NextFun
 
         const token = randomBytes(32).toString('hex');
 
-        await prisma.contract.update({
-            where: { id },
-            data: { publicToken: token },
-        });
-
-        const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+        await contractsRepository.update(id, { publicToken: token });
 
         return successResponse(res, {
             publicToken: token,
             publicUrl: `${frontendUrl}/contract/view/${token}`,
             alreadyPublished: false,
         });
-    } catch (error) {
-        next(error);
+    } catch (err) {
+        next(err);
     }
 }
 
 export async function unpublishContract(req: Request, res: Response, next: NextFunction) {
     try {
-        const userId = req.user!.id;
         const { id } = req.params;
+        const userId = req.user!.id;
 
-        const contract = await prisma.contract.findFirst({
-            where: { id, userId },
-        });
+        const contract = await contractsRepository.findById(id, userId);
+        if (!contract) throw new NotFoundError('Umowa');
 
-        if (!contract) {
-            return errorResponse(res, 'NOT_FOUND', 'Umowa nie znaleziona', 404);
-        }
-
-        await prisma.contract.update({
-            where: { id },
-            data: { publicToken: null },
-        });
+        await contractsRepository.update(id, { publicToken: null });
 
         return successResponse(res, { unpublished: true });
-    } catch (error) {
-        next(error);
+    } catch (err) {
+        next(err);
     }
 }
 
 export async function deleteContract(req: Request, res: Response, next: NextFunction) {
     try {
-        const userId = req.user!.id;
-        const { id } = req.params;
-
-        const deleted = await contractsService.deleteContract(id, userId);
-
-        if (!deleted) {
-            return errorResponse(res, 'NOT_FOUND', 'Umowa nie znaleziona', 404);
-        }
-
+        await contractsService.deleteContract(req.params.id, req.user!.id);
         return successResponse(res, { message: 'Umowa została usunięta' });
-    } catch (error) {
-        next(error);
+    } catch (err) {
+        next(err);
     }
 }
 

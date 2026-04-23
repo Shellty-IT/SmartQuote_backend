@@ -1,148 +1,102 @@
 // src/controllers/offers.controller.ts
-import { Response } from 'express';
+
+import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../types';
 import { offersService } from '../services/offers.service';
+import { offersRepository } from '../repositories/offers.repository';
 import { pdfService } from '../services/pdf';
+import { mapToPDFUser, mapToPDFClient } from '../services/pdf/data-mapper';
 import { successResponse, errorResponse, paginatedResponse } from '../utils/apiResponse';
-import prisma from '../lib/prisma';
+import { NotFoundError } from '../errors/domain.errors';
 
 export class OffersController {
-    async create(req: AuthenticatedRequest, res: Response) {
+    async create(req: AuthenticatedRequest, res: Response, next: NextFunction) {
         try {
             const offer = await offersService.create(req.user!.id, req.body);
             return successResponse(res, offer, 201);
-        } catch (error: unknown) {
-            if (error instanceof Error && error.message === 'CLIENT_NOT_FOUND') {
-                return errorResponse(res, 'CLIENT_NOT_FOUND', 'Klient nie znaleziony', 404);
-            }
-            return errorResponse(res, 'CREATE_FAILED', 'Nie udało się utworzyć oferty', 500);
+        } catch (err) {
+            next(err);
         }
     }
 
-    async findById(req: AuthenticatedRequest, res: Response) {
+    async findById(req: AuthenticatedRequest, res: Response, next: NextFunction) {
         try {
             const offer = await offersService.findById(req.params.id, req.user!.id);
-            if (!offer) {
-                return errorResponse(res, 'NOT_FOUND', 'Oferta nie znaleziona', 404);
-            }
             return successResponse(res, offer);
-        } catch (error: unknown) {
-            return errorResponse(res, 'FETCH_FAILED', 'Nie udało się pobrać oferty', 500);
+        } catch (err) {
+            next(err);
         }
     }
 
-    async findAll(req: AuthenticatedRequest, res: Response) {
+    async findAll(req: AuthenticatedRequest, res: Response, next: NextFunction) {
         try {
             const { offers, total, page, limit } = await offersService.findAll(
                 req.user!.id,
-                req.query as Record<string, string | undefined>
+                req.query as Record<string, string | undefined>,
             );
             return paginatedResponse(res, offers, total, page, limit);
-        } catch (error: unknown) {
-            return errorResponse(res, 'FETCH_FAILED', 'Nie udało się pobrać listy ofert', 500);
+        } catch (err) {
+            next(err);
         }
     }
 
-    async update(req: AuthenticatedRequest, res: Response) {
+    async update(req: AuthenticatedRequest, res: Response, next: NextFunction) {
         try {
             const offer = await offersService.update(req.params.id, req.user!.id, req.body);
-            if (!offer) {
-                return errorResponse(res, 'NOT_FOUND', 'Oferta nie znaleziona', 404);
-            }
             return successResponse(res, offer);
-        } catch (error: unknown) {
-            return errorResponse(res, 'UPDATE_FAILED', 'Nie udało się zaktualizować oferty', 500);
+        } catch (err) {
+            next(err);
         }
     }
 
-    async delete(req: AuthenticatedRequest, res: Response) {
+    async delete(req: AuthenticatedRequest, res: Response, next: NextFunction) {
         try {
-            const offer = await offersService.delete(req.params.id, req.user!.id);
-            if (!offer) {
-                return errorResponse(res, 'NOT_FOUND', 'Oferta nie znaleziona', 404);
-            }
+            await offersService.delete(req.params.id, req.user!.id);
             return successResponse(res, { message: 'Oferta usunięta' });
-        } catch (error: unknown) {
-            return errorResponse(res, 'DELETE_FAILED', 'Nie udało się usunąć oferty', 500);
+        } catch (err) {
+            next(err);
         }
     }
 
-    async getStats(req: AuthenticatedRequest, res: Response) {
+    async getStats(req: AuthenticatedRequest, res: Response, next: NextFunction) {
         try {
             const stats = await offersService.getStats(req.user!.id);
             return successResponse(res, stats);
-        } catch (error: unknown) {
-            return errorResponse(res, 'STATS_FAILED', 'Nie udało się pobrać statystyk', 500);
+        } catch (err) {
+            next(err);
         }
     }
 
-    async duplicate(req: AuthenticatedRequest, res: Response) {
+    async duplicate(req: AuthenticatedRequest, res: Response, next: NextFunction) {
         try {
             const offer = await offersService.duplicate(req.params.id, req.user!.id);
-            if (!offer) {
-                return errorResponse(res, 'NOT_FOUND', 'Oferta nie znaleziona', 404);
-            }
             return successResponse(res, offer, 201);
-        } catch (error: unknown) {
-            return errorResponse(res, 'DUPLICATE_FAILED', 'Nie udało się skopiować oferty', 500);
+        } catch (err) {
+            next(err);
         }
     }
 
-    async generatePDF(req: AuthenticatedRequest, res: Response) {
+    async generatePDF(req: AuthenticatedRequest, res: Response, next: NextFunction) {
         try {
             const { id } = req.params;
             const userId = req.user!.id;
 
-            const offer = await prisma.offer.findFirst({
-                where: { id, userId },
-                include: {
-                    client: true,
-                    items: { orderBy: { position: 'asc' } },
-                    acceptanceLog: true,
-                    user: {
-                        select: {
-                            id: true,
-                            email: true,
-                            name: true,
-                            phone: true,
-                            companyInfo: {
-                                select: {
-                                    name: true,
-                                    nip: true,
-                                    address: true,
-                                    city: true,
-                                    postalCode: true,
-                                    phone: true,
-                                    email: true,
-                                    logo: true,
-                                },
-                            },
-                        },
-                    },
-                },
-            });
-
-            if (!offer) {
-                return errorResponse(res, 'NOT_FOUND', 'Oferta nie znaleziona', 404);
-            }
+            const offer = await offersRepository.findByIdWithUser(id, userId);
+            if (!offer) throw new NotFoundError('Oferta');
 
             const pdfOffer = {
                 ...offer,
-                user: {
+                user: mapToPDFUser({
                     id: offer.user.id,
                     email: offer.user.email,
                     name: offer.user.name,
-                    phone: offer.user.companyInfo?.phone || offer.user.phone,
-                    company: offer.user.companyInfo?.name || null,
-                    nip: offer.user.companyInfo?.nip || null,
-                    address: offer.user.companyInfo?.address || null,
-                    city: offer.user.companyInfo?.city || null,
-                    postalCode: offer.user.companyInfo?.postalCode || null,
-                    logo: offer.user.companyInfo?.logo || null,
-                },
+                    phone: offer.user.companyInfo?.phone ?? offer.user.phone,
+                    companyInfo: offer.user.companyInfo,
+                }),
+                client: mapToPDFClient(offer.client),
             };
 
-            const pdfBuffer = await pdfService.generateOfferPDF(pdfOffer);
+            const pdfBuffer = await pdfService.generateOfferPDF(pdfOffer as Parameters<typeof pdfService.generateOfferPDF>[0]);
             const filename = `Oferta_${offer.number.replace(/\//g, '-')}.pdf`;
 
             res.setHeader('Content-Type', 'application/pdf');
@@ -150,91 +104,63 @@ export class OffersController {
             res.setHeader('Content-Length', pdfBuffer.length);
 
             return res.send(pdfBuffer);
-        } catch (error: unknown) {
-            return errorResponse(res, 'PDF_FAILED', 'Nie udało się wygenerować PDF', 500);
+        } catch (err) {
+            next(err);
         }
     }
 
-    async publish(req: AuthenticatedRequest, res: Response) {
+    async publish(req: AuthenticatedRequest, res: Response, next: NextFunction) {
         try {
             const result = await offersService.publishOffer(req.params.id, req.user!.id);
-            if (!result) {
-                return errorResponse(res, 'NOT_FOUND', 'Oferta nie znaleziona', 404);
-            }
             return successResponse(res, result);
-        } catch (error: unknown) {
-            return errorResponse(res, 'PUBLISH_FAILED', 'Nie udało się opublikować oferty', 500);
+        } catch (err) {
+            next(err);
         }
     }
 
-    async unpublish(req: AuthenticatedRequest, res: Response) {
+    async unpublish(req: AuthenticatedRequest, res: Response, next: NextFunction) {
         try {
-            const result = await offersService.unpublishOffer(req.params.id, req.user!.id);
-            if (!result) {
-                return errorResponse(res, 'NOT_FOUND', 'Oferta nie znaleziona', 404);
-            }
+            await offersService.unpublishOffer(req.params.id, req.user!.id);
             return successResponse(res, { unpublished: true });
-        } catch (error: unknown) {
-            return errorResponse(res, 'UNPUBLISH_FAILED', 'Nie udało się dezaktywować linku', 500);
+        } catch (err) {
+            next(err);
         }
     }
 
-    async getAnalytics(req: AuthenticatedRequest, res: Response) {
+    async getAnalytics(req: AuthenticatedRequest, res: Response, next: NextFunction) {
         try {
             const analytics = await offersService.getOfferAnalytics(req.params.id, req.user!.id);
-            if (!analytics) {
-                return errorResponse(res, 'NOT_FOUND', 'Oferta nie znaleziona', 404);
-            }
             return successResponse(res, analytics);
-        } catch (error: unknown) {
-            return errorResponse(res, 'ANALYTICS_FAILED', 'Nie udało się pobrać analityki', 500);
+        } catch (err) {
+            next(err);
         }
     }
 
-    async getComments(req: AuthenticatedRequest, res: Response) {
+    async getComments(req: AuthenticatedRequest, res: Response, next: NextFunction) {
         try {
             const comments = await offersService.getOfferComments(req.params.id, req.user!.id);
-            if (comments === null) {
-                return errorResponse(res, 'NOT_FOUND', 'Oferta nie znaleziona', 404);
-            }
             return successResponse(res, comments);
-        } catch (error: unknown) {
-            return errorResponse(res, 'FETCH_FAILED', 'Nie udało się pobrać komentarzy', 500);
+        } catch (err) {
+            next(err);
         }
     }
 
-    async addComment(req: AuthenticatedRequest, res: Response) {
+    async addComment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
         try {
-            const { content } = req.body;
+            const { content } = req.body as { content: string };
             const comment = await offersService.addSellerComment(req.params.id, req.user!.id, content);
-            if (!comment) {
-                return errorResponse(res, 'NOT_FOUND', 'Oferta nie znaleziona', 404);
-            }
             return successResponse(res, comment, 201);
-        } catch (error: unknown) {
-            return errorResponse(res, 'COMMENT_FAILED', 'Nie udało się dodać komentarza', 500);
+        } catch (err) {
+            next(err);
         }
     }
 
-    async sendToClient(req: AuthenticatedRequest, res: Response) {
+    async sendToClient(req: AuthenticatedRequest, res: Response, next: NextFunction) {
         try {
             const result = await offersService.sendOfferToClient(req.params.id, req.user!.id);
             return successResponse(res, result);
-        } catch (error: unknown) {
-            if (error instanceof Error) {
-                const errorMap: Record<string, { code: string; message: string; status: number }> = {
-                    OFFER_NOT_FOUND: { code: 'NOT_FOUND', message: 'Oferta nie znaleziona', status: 404 },
-                    CLIENT_NO_EMAIL: { code: 'CLIENT_NO_EMAIL', message: 'Klient nie ma podanego adresu email', status: 400 },
-                    SMTP_NOT_CONFIGURED: { code: 'SMTP_NOT_CONFIGURED', message: 'Skonfiguruj skrzynkę pocztową w ustawieniach, aby wysyłać maile', status: 400 },
-                    PUBLISH_FAILED: { code: 'PUBLISH_FAILED', message: 'Nie udało się opublikować oferty', status: 500 },
-                    EMAIL_SEND_FAILED: { code: 'EMAIL_SEND_FAILED', message: 'Nie udało się wysłać maila. Sprawdź konfigurację SMTP', status: 500 },
-                };
-                const mapped = errorMap[error.message];
-                if (mapped) {
-                    return errorResponse(res, mapped.code, mapped.message, mapped.status);
-                }
-            }
-            return errorResponse(res, 'SEND_FAILED', 'Nie udało się wysłać oferty do klienta', 500);
+        } catch (err) {
+            next(err);
         }
     }
 }
