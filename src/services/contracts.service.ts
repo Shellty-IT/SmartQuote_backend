@@ -1,12 +1,18 @@
 // src/services/contracts.service.ts
-import { Prisma } from '@prisma/client';
-import prisma from '../lib/prisma';
+
+import { ContractStatus } from '@prisma/client';
+import {
+    contractsRepository,
+    ContractItemData,
+    UpdateContractData,
+} from '../repositories/contracts.repository';
 import {
     ContractItemInput,
     CreateContractInput,
     UpdateContractInput,
-    GetContractsParams
+    GetContractsParams,
 } from '../types';
+import { NotFoundError } from '../errors/domain.errors';
 
 function toDate(value: Date | string | undefined | null): Date | null {
     if (!value) return null;
@@ -14,22 +20,13 @@ function toDate(value: Date | string | undefined | null): Date | null {
     return new Date(value);
 }
 
-async function generateContractNumber(userId: string): Promise<string> {
+function generateContractNumberFormat(count: number): string {
     const year = new Date().getFullYear();
-    const count = await prisma.contract.count({
-        where: {
-            userId,
-            createdAt: {
-                gte: new Date(`${year}-01-01`),
-                lt: new Date(`${year + 1}-01-01`),
-            },
-        },
-    });
     const number = String(count + 1).padStart(3, '0');
     return `UMW/${year}/${number}`;
 }
 
-function calculateItem(item: ContractItemInput) {
+function calculateItem(item: ContractItemInput): ContractItemData {
     const quantity = Number(item.quantity);
     const unitPrice = Number(item.unitPrice);
     const vatRate = Number(item.vatRate ?? 23);
@@ -56,64 +53,45 @@ function calculateItem(item: ContractItemInput) {
     };
 }
 
+function sumItems(items: ContractItemData[]) {
+    return {
+        totalNet: items.reduce((sum, i) => sum + i.totalNet, 0),
+        totalVat: items.reduce((sum, i) => sum + i.totalVat, 0),
+        totalGross: items.reduce((sum, i) => sum + i.totalGross, 0),
+    };
+}
+
+async function generateContractNumber(userId: string): Promise<string> {
+    const year = new Date().getFullYear();
+    const count = await contractsRepository.countByYear(userId, year);
+    return generateContractNumberFormat(count);
+}
+
 export async function getContracts(params: GetContractsParams) {
     const { userId, page = 1, limit = 10, status, clientId, search } = params;
 
-    const where: Prisma.ContractWhereInput = { userId };
-
-    if (status) {
-        where.status = status;
-    }
-
-    if (clientId) {
-        where.clientId = clientId;
-    }
-
-    if (search) {
-        where.OR = [
-            { number: { contains: search, mode: 'insensitive' } },
-            { title: { contains: search, mode: 'insensitive' } },
-            { client: { name: { contains: search, mode: 'insensitive' } } },
-        ];
-    }
-
-    const [contracts, total] = await Promise.all([
-        prisma.contract.findMany({
-            where,
-            include: {
-                client: true,
-                _count: { select: { items: true } },
-            },
-            orderBy: { createdAt: 'desc' },
-            skip: (page - 1) * limit,
-            take: limit,
-        }),
-        prisma.contract.count({ where }),
-    ]);
+    const result = await contractsRepository.findAll({
+        userId,
+        page,
+        limit,
+        status: status as ContractStatus | undefined,
+        clientId,
+        search,
+    });
 
     return {
-        data: contracts,
+        data: result.contracts,
         pagination: {
-            page,
-            limit,
-            total,
-            totalPages: Math.ceil(total / limit),
+            page: result.page,
+            limit: result.limit,
+            total: result.total,
+            totalPages: Math.ceil(result.total / result.limit),
         },
     };
 }
 
 export async function getContractById(id: string, userId: string) {
-    const contract = await prisma.contract.findFirst({
-        where: { id, userId },
-        include: {
-            client: true,
-            offer: true,
-            items: { orderBy: { position: 'asc' } },
-            signatureLog: true,
-        },
-    });
-
-    return contract;
+    return contractsRepository.findById(id, userId);
 }
 
 export async function createContract(userId: string, data: CreateContractInput) {
@@ -124,128 +102,76 @@ export async function createContract(userId: string, data: CreateContractInput) 
         position: item.position ?? index,
     }));
 
-    const totalNet = calculatedItems.reduce((sum: number, item: { totalNet: number }) => sum + item.totalNet, 0);
-    const totalVat = calculatedItems.reduce((sum: number, item: { totalVat: number }) => sum + item.totalVat, 0);
-    const totalGross = calculatedItems.reduce((sum: number, item: { totalGross: number }) => sum + item.totalGross, 0);
+    const totals = sumItems(calculatedItems);
 
-    const contract = await prisma.contract.create({
-        data: {
-            number,
-            title: data.title,
-            description: data.description,
-            clientId: data.clientId,
-            offerId: data.offerId,
-            userId,
-            startDate: toDate(data.startDate),
-            endDate: toDate(data.endDate),
-            terms: data.terms,
-            paymentTerms: data.paymentTerms,
-            paymentDays: data.paymentDays ?? 14,
-            notes: data.notes,
-            totalNet,
-            totalVat,
-            totalGross,
-            items: {
-                create: calculatedItems,
-            },
-        },
-        include: {
-            client: true,
-            items: true,
-        },
+    return contractsRepository.create({
+        number,
+        title: data.title,
+        description: data.description,
+        clientId: data.clientId,
+        offerId: data.offerId,
+        userId,
+        startDate: toDate(data.startDate),
+        endDate: toDate(data.endDate),
+        terms: data.terms,
+        paymentTerms: data.paymentTerms,
+        paymentDays: data.paymentDays ?? 14,
+        notes: data.notes,
+        ...totals,
+        items: calculatedItems,
     });
-
-    return contract;
 }
 
 export async function updateContract(id: string, userId: string, data: UpdateContractInput) {
-    const existing = await prisma.contract.findFirst({
-        where: { id, userId },
-    });
+    const existing = await contractsRepository.findById(id, userId);
+    if (!existing) throw new NotFoundError('Umowa');
 
-    if (!existing) {
-        return null;
-    }
+    const updateData: UpdateContractData = {
+        title: data.title,
+        description: data.description,
+        status: data.status as ContractStatus | undefined,
+        startDate: data.startDate !== undefined ? toDate(data.startDate) : undefined,
+        endDate: data.endDate !== undefined ? toDate(data.endDate) : undefined,
+        signedAt: data.signedAt !== undefined ? toDate(data.signedAt) : undefined,
+        terms: data.terms,
+        paymentTerms: data.paymentTerms,
+        paymentDays: data.paymentDays,
+        notes: data.notes,
+    };
 
-    let itemsData = undefined;
-    let totals = {};
-
-    if (data.items) {
-        await prisma.contractItem.deleteMany({ where: { contractId: id } });
-
+    if (data.items && data.items.length > 0) {
         const calculatedItems = data.items.map((item: ContractItemInput, index: number) => ({
             ...calculateItem(item),
             position: item.position ?? index,
         }));
 
-        itemsData = { create: calculatedItems };
+        const totals = sumItems(calculatedItems);
 
-        totals = {
-            totalNet: calculatedItems.reduce((sum: number, item: { totalNet: number }) => sum + item.totalNet, 0),
-            totalVat: calculatedItems.reduce((sum: number, item: { totalVat: number }) => sum + item.totalVat, 0),
-            totalGross: calculatedItems.reduce((sum: number, item: { totalGross: number }) => sum + item.totalGross, 0),
-        };
+        return contractsRepository.updateWithItems(id, { ...updateData, ...totals }, calculatedItems);
     }
 
-    const contract = await prisma.contract.update({
-        where: { id },
-        data: {
-            title: data.title,
-            description: data.description,
-            status: data.status,
-            startDate: data.startDate !== undefined ? toDate(data.startDate) : undefined,
-            endDate: data.endDate !== undefined ? toDate(data.endDate) : undefined,
-            signedAt: data.signedAt !== undefined ? toDate(data.signedAt) : undefined,
-            terms: data.terms,
-            paymentTerms: data.paymentTerms,
-            paymentDays: data.paymentDays,
-            notes: data.notes,
-            ...totals,
-            items: itemsData,
-        },
-        include: {
-            client: true,
-            items: { orderBy: { position: 'asc' } },
-        },
-    });
-
-    return contract;
+    return contractsRepository.update(id, updateData);
 }
 
 export async function deleteContract(id: string, userId: string) {
-    const existing = await prisma.contract.findFirst({
-        where: { id, userId },
-    });
-
-    if (!existing) {
-        return false;
-    }
-
-    await prisma.contract.delete({ where: { id } });
+    const existing = await contractsRepository.findById(id, userId);
+    if (!existing) throw new NotFoundError('Umowa');
+    await contractsRepository.delete(id);
     return true;
 }
 
 export async function createContractFromOffer(offerId: string, userId: string) {
-    const offer = await prisma.offer.findFirst({
-        where: { id: offerId, userId },
-        include: {
-            client: true,
-            items: { orderBy: { position: 'asc' } },
-        },
-    });
+    const offer = await contractsRepository.findOfferForContract(offerId, userId);
+    if (!offer) throw new NotFoundError('Oferta');
 
-    if (!offer) {
-        return null;
-    }
-
-    const contractData: CreateContractInput = {
+    return createContract(userId, {
         title: `Umowa - ${offer.title}`,
         description: offer.description ?? undefined,
         clientId: offer.clientId,
         offerId: offer.id,
         terms: offer.terms ?? undefined,
         paymentDays: offer.paymentDays,
-        items: offer.items.map(item => ({
+        items: offer.items.map((item) => ({
             name: item.name,
             description: item.description ?? undefined,
             quantity: Number(item.quantity),
@@ -255,27 +181,15 @@ export async function createContractFromOffer(offerId: string, userId: string) {
             discount: Number(item.discount),
             position: item.position,
         })),
-    };
-
-    return createContract(userId, contractData);
+    });
 }
 
 export async function getContractsStats(userId: string) {
     const [total, byStatus, values, activeContracts] = await Promise.all([
-        prisma.contract.count({ where: { userId } }),
-        prisma.contract.groupBy({
-            by: ['status'],
-            where: { userId },
-            _count: { status: true },
-        }),
-        prisma.contract.aggregate({
-            where: { userId },
-            _sum: { totalGross: true },
-        }),
-        prisma.contract.aggregate({
-            where: { userId, status: 'ACTIVE' },
-            _sum: { totalGross: true },
-        }),
+        contractsRepository.count(userId),
+        contractsRepository.groupByStatus(userId),
+        contractsRepository.aggregateTotalGross(userId),
+        contractsRepository.aggregateTotalGross(userId, 'ACTIVE'),
     ]);
 
     const statusCounts: Record<string, number> = {
@@ -287,7 +201,7 @@ export async function getContractsStats(userId: string) {
         EXPIRED: 0,
     };
 
-    byStatus.forEach(item => {
+    byStatus.forEach((item) => {
         statusCounts[item.status] = item._count.status;
     });
 

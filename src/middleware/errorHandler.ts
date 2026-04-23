@@ -1,45 +1,57 @@
+// src/middleware/errorHandler.ts
+
 import { Request, Response, NextFunction } from 'express';
-import { Prisma } from '@prisma/client';
-import { errorResponse } from '../utils/apiResponse';
-import { isDev } from '../config';
+import { DomainError } from '../errors/domain.errors';
+import { ZodError } from 'zod';
+
+interface ErrorBody {
+    success: false;
+    error: {
+        code: string;
+        message: string;
+        details?: unknown;
+    };
+}
+
+function buildErrorBody(code: string, message: string, details?: unknown): ErrorBody {
+    return {
+        success: false,
+        error: { code, message, ...(details !== undefined ? { details } : {}) },
+    };
+}
 
 export function errorHandler(
-    err: Error,
-    req: Request,
+    err: unknown,
+    _req: Request,
     res: Response,
-    next: NextFunction
+    _next: NextFunction,
 ): void {
-    console.error('[ERROR]', err);
-
-    // Prisma errors
-    if (err instanceof Prisma.PrismaClientKnownRequestError) {
-        switch (err.code) {
-            case 'P2002':
-                errorResponse(res, 'DUPLICATE_ENTRY', 'Rekord już istnieje', 409);
-                return;
-            case 'P2025':
-                errorResponse(res, 'NOT_FOUND', 'Nie znaleziono rekordu', 404);
-                return;
-            case 'P2003':
-                errorResponse(res, 'FOREIGN_KEY_ERROR', 'Nieprawidłowa relacja', 400);
-                return;
-            default:
-                errorResponse(res, 'DATABASE_ERROR', 'Błąd bazy danych', 500);
-                return;
-        }
-    }
-
-    if (err instanceof Prisma.PrismaClientValidationError) {
-        errorResponse(res, 'VALIDATION_ERROR', 'Nieprawidłowe dane', 400);
+    if (err instanceof DomainError) {
+        res.status(err.statusCode).json(buildErrorBody(err.code, err.message));
         return;
     }
 
-    // Default error
-    errorResponse(
-        res,
-        'INTERNAL_ERROR',
-        isDev ? err.message : 'Wewnętrzny błąd serwera',
-        500,
-        isDev ? err.stack : undefined
-    );
+    if (err instanceof ZodError) {
+        res.status(422).json(
+            buildErrorBody(
+                'VALIDATION_ERROR',
+                'Dane wejściowe są nieprawidłowe',
+                err.flatten().fieldErrors,
+            ),
+        );
+        return;
+    }
+
+    if (err instanceof Error) {
+        const isDev = process.env.NODE_ENV === 'development';
+        res.status(500).json(
+            buildErrorBody(
+                'INTERNAL_ERROR',
+                isDev ? err.message : 'Wystąpił wewnętrzny błąd serwera',
+            ),
+        );
+        return;
+    }
+
+    res.status(500).json(buildErrorBody('INTERNAL_ERROR', 'Wystąpił nieznany błąd'));
 }

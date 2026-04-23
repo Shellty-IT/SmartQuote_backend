@@ -1,9 +1,13 @@
 // src/services/email-composer.service.ts
+
 import nodemailer from 'nodemailer';
-import prisma from '../lib/prisma';
 import { getDecryptedSmtpConfig } from './settings.service';
 import { pdfService } from './pdf/index';
 import { mapToPDFUser, mapToPDFClient } from './pdf/data-mapper';
+import { emailComposerRepository } from '../repositories/email-composer.repository';
+import { offersRepository } from '../repositories/offers.repository';
+import { contractsRepository } from '../repositories/contracts.repository';
+import { NotFoundError, ValidationError, ExternalServiceError } from '../errors/domain.errors';
 import type {
     SendEmailInput,
     UpdateDraftInput,
@@ -13,7 +17,6 @@ import type {
     GetEmailLogsParams,
     EmailLogStatus,
 } from '../types';
-import type { Prisma } from '@prisma/client';
 
 interface AttachmentBuffer {
     filename: string;
@@ -21,42 +24,44 @@ interface AttachmentBuffer {
     contentType: string;
 }
 
-interface CompanyInfoForPDF {
-    name: string | null;
-    nip: string | null;
-    address: string | null;
-    city: string | null;
-    postalCode: string | null;
-    phone: string | null;
-    email: string | null;
-    website?: string | null;
-    logo?: string | null;
-}
-
 interface UserForPDF {
     id: string;
     email: string;
     name: string | null;
     phone: string | null;
-    companyInfo: CompanyInfoForPDF | null;
+    companyInfo: {
+        name: string | null;
+        nip: string | null;
+        address: string | null;
+        city: string | null;
+        postalCode: string | null;
+        phone: string | null;
+        email: string | null;
+        website?: string | null;
+        logo?: string | null;
+    } | null;
 }
 
 class EmailComposerService {
     private readonly frontendUrl: string;
 
     constructor() {
-        this.frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+        this.frontendUrl = (process.env.FRONTEND_URL ?? 'http://localhost:3000').replace(/\/$/, '');
     }
 
     private async getSmtpOrThrow(userId: string) {
         const config = await getDecryptedSmtpConfig(userId);
-        if (!config) {
-            throw new Error('SMTP_NOT_CONFIGURED');
-        }
+        if (!config) throw new ValidationError('Skonfiguruj skrzynkę pocztową w ustawieniach SMTP');
         return config;
     }
 
-    private createTransporter(config: { host: string; port: number; user: string; pass: string; from: string }) {
+    private createTransporter(config: {
+        host: string;
+        port: number;
+        user: string;
+        pass: string;
+        from: string;
+    }) {
         return nodemailer.createTransport({
             host: config.host,
             port: config.port,
@@ -90,37 +95,8 @@ class EmailComposerService {
     }
 
     private async generateOfferPDFBuffer(offerId: string, userId: string): Promise<AttachmentBuffer> {
-        const offer = await prisma.offer.findFirst({
-            where: { id: offerId, userId },
-            include: {
-                client: true,
-                items: { orderBy: { position: 'asc' } },
-                user: {
-                    select: {
-                        id: true,
-                        email: true,
-                        name: true,
-                        phone: true,
-                        companyInfo: {
-                            select: {
-                                name: true,
-                                nip: true,
-                                address: true,
-                                city: true,
-                                postalCode: true,
-                                phone: true,
-                                email: true,
-                                website: true,
-                                logo: true,
-                            },
-                        },
-                    },
-                },
-                acceptanceLog: true,
-            },
-        });
-
-        if (!offer) throw new Error('Oferta nie znaleziona');
+        const offer = await offersRepository.findByIdForPDFAttachment(offerId, userId);
+        if (!offer) throw new NotFoundError('Oferta');
 
         const userForPDF: UserForPDF = {
             id: offer.user.id,
@@ -130,56 +106,23 @@ class EmailComposerService {
             companyInfo: offer.user.companyInfo,
         };
 
-        const pdfUser = mapToPDFUser(userForPDF);
-        const pdfClient = mapToPDFClient(offer.client);
-
         const pdfBuffer = await pdfService.generateOfferPDF({
             ...offer,
-            user: pdfUser,
-            client: pdfClient,
+            user: mapToPDFUser(userForPDF),
+            client: mapToPDFClient(offer.client),
             acceptanceLog: null,
-        });
+        } as Parameters<typeof pdfService.generateOfferPDF>[0]);
 
-        const safeNumber = offer.number.replace(/\//g, '-');
         return {
-            filename: `Oferta_${safeNumber}.pdf`,
+            filename: `Oferta_${offer.number.replace(/\//g, '-')}.pdf`,
             content: pdfBuffer,
             contentType: 'application/pdf',
         };
     }
 
     private async generateContractPDFBuffer(contractId: string, userId: string): Promise<AttachmentBuffer> {
-        const contract = await prisma.contract.findFirst({
-            where: { id: contractId, userId },
-            include: {
-                client: true,
-                items: { orderBy: { position: 'asc' } },
-                user: {
-                    select: {
-                        id: true,
-                        email: true,
-                        name: true,
-                        phone: true,
-                        companyInfo: {
-                            select: {
-                                name: true,
-                                nip: true,
-                                address: true,
-                                city: true,
-                                postalCode: true,
-                                phone: true,
-                                email: true,
-                                website: true,
-                                logo: true,
-                            },
-                        },
-                    },
-                },
-                signatureLog: true,
-            },
-        });
-
-        if (!contract) throw new Error('Kontrakt nie znaleziony');
+        const contract = await contractsRepository.findByIdForPDFAttachment(contractId, userId);
+        if (!contract) throw new NotFoundError('Kontrakt');
 
         const userForPDF: UserForPDF = {
             id: contract.user.id,
@@ -189,19 +132,15 @@ class EmailComposerService {
             companyInfo: contract.user.companyInfo,
         };
 
-        const pdfUser = mapToPDFUser(userForPDF);
-        const pdfClient = mapToPDFClient(contract.client);
-
         const pdfBuffer = await pdfService.generateContractPDF({
             ...contract,
-            user: pdfUser,
-            client: pdfClient,
+            user: mapToPDFUser(userForPDF),
+            client: mapToPDFClient(contract.client),
             signatureLog: undefined,
-        });
+        } as Parameters<typeof pdfService.generateContractPDF>[0]);
 
-        const safeNumber = contract.number.replace(/\//g, '-');
         return {
-            filename: `Umowa_${safeNumber}.pdf`,
+            filename: `Umowa_${contract.number.replace(/\//g, '-')}.pdf`,
             content: pdfBuffer,
             contentType: 'application/pdf',
         };
@@ -209,8 +148,11 @@ class EmailComposerService {
 
     private async resolveAttachments(
         attachments: EmailAttachment[],
-        userId: string
-    ): Promise<{ nodemailerAttachments: nodemailer.SendMailOptions['attachments']; linkLines: string[] }> {
+        userId: string,
+    ): Promise<{
+        nodemailerAttachments: nodemailer.SendMailOptions['attachments'];
+        linkLines: string[];
+    }> {
         const nodemailerAttachments: nodemailer.SendMailOptions['attachments'] = [];
         const linkLines: string[] = [];
 
@@ -230,18 +172,12 @@ class EmailComposerService {
                     contentType: buf.contentType,
                 });
             } else if (att.type === 'offer_link') {
-                const offer = await prisma.offer.findFirst({
-                    where: { id: att.resourceId, userId },
-                    select: { publicToken: true, number: true },
-                });
+                const offer = await emailComposerRepository.findOfferPublicToken(att.resourceId, userId);
                 if (offer?.publicToken) {
                     linkLines.push(`Oferta ${offer.number}: ${this.frontendUrl}/offer/view/${offer.publicToken}`);
                 }
             } else if (att.type === 'contract_link') {
-                const contract = await prisma.contract.findFirst({
-                    where: { id: att.resourceId, userId },
-                    select: { publicToken: true, number: true },
-                });
+                const contract = await emailComposerRepository.findContractPublicToken(att.resourceId, userId);
                 if (contract?.publicToken) {
                     linkLines.push(`Umowa ${contract.number}: ${this.frontendUrl}/contract/view/${contract.publicToken}`);
                 }
@@ -251,40 +187,39 @@ class EmailComposerService {
         return { nodemailerAttachments, linkLines };
     }
 
+    private appendLinksToBody(body: string, linkLines: string[]): string {
+        if (linkLines.length === 0) return body;
+        return `${body}\n\n---\n${linkLines.join('\n')}`;
+    }
+
     async sendEmail(userId: string, input: SendEmailInput): Promise<{ id: string; status: EmailLogStatus }> {
         if (input.saveAsDraft) {
-            const log = await prisma.emailLog.create({
-                data: {
-                    userId,
-                    to: input.to,
-                    toName: input.toName,
-                    subject: input.subject,
-                    body: input.body,
-                    status: 'DRAFT',
-                    attachments: (input.attachments ?? []) as unknown as Prisma.InputJsonValue,
-                    clientId: input.clientId,
-                    offerId: input.offerId,
-                    contractId: input.contractId,
-                    templateId: input.templateId,
-                    templateName: input.templateName,
-                },
+            const log = await emailComposerRepository.createLog({
+                userId,
+                to: input.to,
+                toName: input.toName,
+                subject: input.subject,
+                body: input.body,
+                status: 'DRAFT',
+                attachments: input.attachments ?? [],
+                clientId: input.clientId,
+                offerId: input.offerId,
+                contractId: input.contractId,
+                templateId: input.templateId,
+                templateName: input.templateName,
             });
             return { id: log.id, status: 'DRAFT' };
         }
 
         const smtpConfig = await this.getSmtpOrThrow(userId);
         const attachments = input.attachments ?? [];
-        let errorMessage: string | undefined;
-        let status: EmailLogStatus = 'SENT';
 
         const { nodemailerAttachments, linkLines } = await this.resolveAttachments(attachments, userId);
-
-        let finalBody = input.body;
-        if (linkLines.length > 0) {
-            finalBody += '\n\n---\n' + linkLines.join('\n');
-        }
-
+        const finalBody = this.appendLinksToBody(input.body, linkLines);
         const htmlBody = this.buildHtmlBody(finalBody);
+
+        let status: EmailLogStatus = 'SENT';
+        let errorMessage: string | undefined;
 
         try {
             const transporter = this.createTransporter(smtpConfig);
@@ -301,46 +236,38 @@ class EmailComposerService {
             errorMessage = err instanceof Error ? err.message : 'Nieznany błąd SMTP';
         }
 
-        const log = await prisma.emailLog.create({
-            data: {
-                userId,
-                to: input.to,
-                toName: input.toName,
-                subject: input.subject,
-                body: input.body,
-                status,
-                errorMessage,
-                attachments: attachments as unknown as Prisma.InputJsonValue,
-                clientId: input.clientId,
-                offerId: input.offerId,
-                contractId: input.contractId,
-                templateId: input.templateId,
-                templateName: input.templateName,
-            },
+        const log = await emailComposerRepository.createLog({
+            userId,
+            to: input.to,
+            toName: input.toName,
+            subject: input.subject,
+            body: input.body,
+            status,
+            errorMessage,
+            attachments,
+            clientId: input.clientId,
+            offerId: input.offerId,
+            contractId: input.contractId,
+            templateId: input.templateId,
+            templateName: input.templateName,
         });
 
         return { id: log.id, status };
     }
 
     async sendDraft(userId: string, draftId: string): Promise<{ id: string; status: EmailLogStatus }> {
-        const draft = await prisma.emailLog.findFirst({
-            where: { id: draftId, userId, status: 'DRAFT' },
-        });
-        if (!draft) throw new Error('Szkic nie znaleziony');
+        const draft = await emailComposerRepository.findDraftById(draftId, userId);
+        if (!draft) throw new NotFoundError('Szkic');
 
-        const attachments = (draft.attachments as unknown as EmailAttachment[]) ?? [];
         const smtpConfig = await this.getSmtpOrThrow(userId);
-        let errorMessage: string | undefined;
-        let newStatus: EmailLogStatus = 'SENT';
+        const attachments = (draft.attachments as unknown as EmailAttachment[]) ?? [];
 
         const { nodemailerAttachments, linkLines } = await this.resolveAttachments(attachments, userId);
-
-        let finalBody = draft.body;
-        if (linkLines.length > 0) {
-            finalBody += '\n\n---\n' + linkLines.join('\n');
-        }
-
+        const finalBody = this.appendLinksToBody(draft.body, linkLines);
         const htmlBody = this.buildHtmlBody(finalBody);
+
+        let newStatus: EmailLogStatus = 'SENT';
+        let errorMessage: string | undefined;
 
         try {
             const transporter = this.createTransporter(smtpConfig);
@@ -357,145 +284,86 @@ class EmailComposerService {
             errorMessage = err instanceof Error ? err.message : 'Nieznany błąd SMTP';
         }
 
-        const updated = await prisma.emailLog.update({
-            where: { id: draftId },
-            data: {
-                status: newStatus,
-                errorMessage,
-                sentAt: newStatus === 'SENT' ? new Date() : undefined,
-            },
+        const updated = await emailComposerRepository.updateLog(draftId, {
+            status: newStatus,
+            errorMessage,
+            sentAt: newStatus === 'SENT' ? new Date() : undefined,
         });
 
         return { id: updated.id, status: newStatus };
     }
 
     async updateDraft(userId: string, draftId: string, input: UpdateDraftInput): Promise<{ id: string }> {
-        const draft = await prisma.emailLog.findFirst({
-            where: { id: draftId, userId, status: 'DRAFT' },
-        });
-        if (!draft) throw new Error('Szkic nie znaleziony');
+        const draft = await emailComposerRepository.findDraftById(draftId, userId);
+        if (!draft) throw new NotFoundError('Szkic');
 
-        const updated = await prisma.emailLog.update({
-            where: { id: draftId },
-            data: {
-                to: input.to,
-                toName: input.toName,
-                subject: input.subject,
-                body: input.body,
-                clientId: input.clientId,
-                offerId: input.offerId,
-                contractId: input.contractId,
-                templateId: input.templateId,
-                templateName: input.templateName,
-                attachments: input.attachments !== undefined
-                    ? (input.attachments as unknown as Prisma.InputJsonValue)
-                    : undefined,
-            },
+        const updated = await emailComposerRepository.updateLog(draftId, {
+            to: input.to,
+            toName: input.toName,
+            subject: input.subject,
+            body: input.body,
+            clientId: input.clientId,
+            offerId: input.offerId,
+            contractId: input.contractId,
+            templateId: input.templateId,
+            templateName: input.templateName,
+            attachments: input.attachments,
         });
 
         return { id: updated.id };
     }
 
     async deleteEmailLog(userId: string, logId: string): Promise<void> {
-        const log = await prisma.emailLog.findFirst({
-            where: { id: logId, userId },
-        });
-        if (!log) throw new Error('Wiadomość nie znaleziona');
-        await prisma.emailLog.delete({ where: { id: logId } });
+        const log = await emailComposerRepository.findLogById(logId, userId);
+        if (!log) throw new NotFoundError('Wiadomość');
+        await emailComposerRepository.deleteLog(logId);
     }
 
     async getEmailLogs(params: GetEmailLogsParams) {
-        const { userId, page = 1, limit = 20, status, clientId, offerId, contractId, search } = params;
-
-        const where: Prisma.EmailLogWhereInput = { userId };
-        if (status) where.status = status;
-        if (clientId) where.clientId = clientId;
-        if (offerId) where.offerId = offerId;
-        if (contractId) where.contractId = contractId;
-        if (search) {
-            where.OR = [
-                { subject: { contains: search, mode: 'insensitive' } },
-                { to: { contains: search, mode: 'insensitive' } },
-                { toName: { contains: search, mode: 'insensitive' } },
-            ];
-        }
-
-        const [total, items] = await Promise.all([
-            prisma.emailLog.count({ where }),
-            prisma.emailLog.findMany({
-                where,
-                orderBy: { sentAt: 'desc' },
-                skip: (page - 1) * limit,
-                take: limit,
-                include: {
-                    client: { select: { id: true, name: true, email: true } },
-                    offer: { select: { id: true, number: true, title: true } },
-                    contract: { select: { id: true, number: true, title: true } },
-                },
-            }),
-        ]);
+        const result = await emailComposerRepository.findLogs(params);
 
         return {
-            items,
+            items: result.items,
             meta: {
-                page,
-                limit,
-                total,
-                totalPages: Math.ceil(total / limit),
+                page: result.page,
+                limit: result.limit,
+                total: result.total,
+                totalPages: Math.ceil(result.total / result.limit),
             },
         };
     }
 
     async getEmailLogById(userId: string, logId: string) {
-        const log = await prisma.emailLog.findFirst({
-            where: { id: logId, userId },
-            include: {
-                client: { select: { id: true, name: true, email: true } },
-                offer: { select: { id: true, number: true, title: true } },
-                contract: { select: { id: true, number: true, title: true } },
-            },
-        });
-        if (!log) throw new Error('Wiadomość nie znaleziona');
+        const log = await emailComposerRepository.findLogById(logId, userId);
+        if (!log) throw new NotFoundError('Wiadomość');
         return log;
     }
 
     async createTemplate(userId: string, input: CreateEmailTemplateInput) {
-        return prisma.emailTemplate.create({
-            data: { userId, ...input },
-        });
+        return emailComposerRepository.createTemplate(userId, input);
     }
 
     async updateTemplate(userId: string, templateId: string, input: UpdateEmailTemplateInput) {
-        const template = await prisma.emailTemplate.findFirst({
-            where: { id: templateId, userId, isBuiltIn: false },
-        });
-        if (!template) throw new Error('Szablon nie znaleziony');
-        return prisma.emailTemplate.update({
-            where: { id: templateId },
-            data: input,
-        });
+        const template = await emailComposerRepository.findTemplateById(templateId, userId);
+        if (!template) throw new NotFoundError('Szablon');
+        if (template.isBuiltIn) throw new ValidationError('Nie można edytować wbudowanego szablonu');
+        return emailComposerRepository.updateTemplate(templateId, input);
     }
 
     async deleteTemplate(userId: string, templateId: string): Promise<void> {
-        const template = await prisma.emailTemplate.findFirst({
-            where: { id: templateId, userId, isBuiltIn: false },
-        });
-        if (!template) throw new Error('Szablon nie znaleziony lub jest wbudowany');
-        await prisma.emailTemplate.delete({ where: { id: templateId } });
+        const template = await emailComposerRepository.findTemplateById(templateId, userId);
+        if (!template) throw new NotFoundError('Szablon');
+        if (template.isBuiltIn) throw new ValidationError('Nie można usunąć wbudowanego szablonu');
+        await emailComposerRepository.deleteTemplate(templateId);
     }
 
     async getTemplates(userId: string) {
-        return prisma.emailTemplate.findMany({
-            where: { userId },
-            orderBy: [{ isBuiltIn: 'desc' }, { createdAt: 'asc' }],
-        });
+        return emailComposerRepository.findTemplates(userId);
     }
 
     async getTemplateById(userId: string, templateId: string) {
-        const template = await prisma.emailTemplate.findFirst({
-            where: { id: templateId, userId },
-        });
-        if (!template) throw new Error('Szablon nie znaleziony');
+        const template = await emailComposerRepository.findTemplateById(templateId, userId);
+        if (!template) throw new NotFoundError('Szablon');
         return template;
     }
 }
