@@ -1,5 +1,4 @@
 // src/validators/email-composer.validator.ts
-
 import { z } from 'zod';
 
 const emailAttachmentSchema = z.object({
