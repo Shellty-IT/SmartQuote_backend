@@ -1,7 +1,7 @@
 // src/services/publicOffer.service.ts
-import prisma from '../lib/prisma';
 import { Decimal } from '@prisma/client/runtime/library';
 import { Prisma } from '@prisma/client';
+import { publicOfferRepository } from '../repositories/publicOffer.repository';
 import { notificationService } from './notification.service';
 import { emailService } from './email';
 import { getDecryptedSmtpConfig } from './settings.service';
@@ -18,8 +18,22 @@ interface AcceptOfferOptions {
     readonly clientEmail?: string;
 }
 
+function isExpired(validUntil: Date | null): boolean {
+    return validUntil ? new Date(validUntil) < new Date() : false;
+}
+
+function isDecided(status: string): boolean {
+    return status === 'ACCEPTED' || status === 'REJECTED';
+}
+
 export class PublicOfferService {
-    private sendAcceptanceConfirmationEmail(
+    private readonly frontendUrl: string;
+
+    constructor() {
+        this.frontendUrl = (process.env.FRONTEND_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+    }
+
+    private fireAcceptanceConfirmationEmail(
         userId: string,
         clientEmail: string,
         data: {
@@ -34,17 +48,11 @@ export class PublicOfferService {
             publicToken: string;
             sellerName: string;
             companyName: string | null;
-        }
+        },
     ): void {
-        const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
-
         getDecryptedSmtpConfig(userId)
             .then((smtpConfig) => {
-                if (!smtpConfig) {
-                    console.log('ℹ️ No SMTP config for acceptance confirmation email');
-                    return;
-                }
-
+                if (!smtpConfig) return;
                 return emailService.sendAcceptanceConfirmation(
                     clientEmail,
                     {
@@ -56,93 +64,40 @@ export class PublicOfferService {
                         contentHash: data.contentHash,
                         acceptedAt: data.acceptedAt,
                         selectedVariant: data.selectedVariant,
-                        publicUrl: `${frontendUrl}/offer/view/${data.publicToken}`,
+                        publicUrl: `${this.frontendUrl}/offer/view/${data.publicToken}`,
                         sellerName: data.sellerName,
                         companyName: data.companyName,
                     },
-                    smtpConfig
+                    smtpConfig,
                 );
             })
-            .then(() => {
-                console.log(`✅ Acceptance confirmation sent to ${clientEmail}`);
-            })
-            .catch((err: unknown) => {
-                console.error('❌ Acceptance confirmation email failed:', err);
-            });
+            .catch((_err: unknown) => {});
     }
 
     async getOfferByToken(token: string) {
-        const offer = await prisma.offer.findFirst({
-            where: { publicToken: token, isInteractive: true },
-            include: {
-                items: { orderBy: { position: 'asc' } },
-                client: {
-                    select: {
-                        name: true,
-                        company: true,
-                        email: true,
-                    },
-                },
-                user: {
-                    select: {
-                        name: true,
-                        email: true,
-                        phone: true,
-                        companyInfo: {
-                            select: {
-                                name: true,
-                                nip: true,
-                                address: true,
-                                city: true,
-                                postalCode: true,
-                                phone: true,
-                                email: true,
-                                website: true,
-                                logo: true,
-                                primaryColor: true,
-                            },
-                        },
-                    },
-                },
-                comments: {
-                    orderBy: { createdAt: 'asc' },
-                },
-                acceptanceLog: {
-                    select: {
-                        contentHash: true,
-                        acceptedAt: true,
-                        selectedVariant: true,
-                        totalGross: true,
-                        currency: true,
-                    },
-                },
-            },
-        });
-
+        const offer = await publicOfferRepository.findByTokenFull(token);
         if (!offer) return null;
 
-        const isExpired = offer.validUntil
-            ? new Date(offer.validUntil) < new Date()
-            : false;
-
-        const variantNames = [...new Set(
-            offer.items
-                .filter((item) => item.variantName)
-                .map((item) => item.variantName!)
-        )];
+        const variantNames = [
+            ...new Set(
+                offer.items.filter((item) => item.variantName).map((item) => item.variantName!),
+            ),
+        ];
 
         return {
-            expired: isExpired,
-            decided: offer.status === 'ACCEPTED' || offer.status === 'REJECTED',
+            expired: isExpired(offer.validUntil),
+            decided: isDecided(offer.status),
             requireAuditTrail: offer.requireAuditTrail,
             variants: variantNames,
-            acceptanceLog: offer.acceptanceLog ? {
-                contentHash: offer.acceptanceLog.contentHash,
-                acceptedAt: offer.acceptanceLog.acceptedAt,
-                selectedVariant: offer.acceptanceLog.selectedVariant,
-                totalGross: offer.acceptanceLog.totalGross,
-                currency: offer.acceptanceLog.currency,
-            } : null,
+            acceptanceLog: offer.acceptanceLog
+                ? {
+                    contentHash: offer.acceptanceLog.contentHash,
+                    acceptedAt: offer.acceptanceLog.acceptedAt,
+                    selectedVariant: offer.acceptanceLog.selectedVariant,
+                    totalGross: offer.acceptanceLog.totalGross,
+                    currency: offer.acceptanceLog.currency,
+                }
+                : null,
             offer: {
                 id: offer.id,
                 number: offer.number,
@@ -186,15 +141,15 @@ export class PublicOfferService {
                 seller: {
                     name: offer.user.name,
                     email: offer.user.email,
-                    phone: offer.user.companyInfo?.phone || offer.user.phone,
-                    company: offer.user.companyInfo?.name || null,
-                    nip: offer.user.companyInfo?.nip || null,
-                    address: offer.user.companyInfo?.address || null,
-                    city: offer.user.companyInfo?.city || null,
-                    postalCode: offer.user.companyInfo?.postalCode || null,
-                    website: offer.user.companyInfo?.website || null,
-                    logo: offer.user.companyInfo?.logo || null,
-                    primaryColor: offer.user.companyInfo?.primaryColor || null,
+                    phone: offer.user.companyInfo?.phone ?? offer.user.phone,
+                    company: offer.user.companyInfo?.name ?? null,
+                    nip: offer.user.companyInfo?.nip ?? null,
+                    address: offer.user.companyInfo?.address ?? null,
+                    city: offer.user.companyInfo?.city ?? null,
+                    postalCode: offer.user.companyInfo?.postalCode ?? null,
+                    website: offer.user.companyInfo?.website ?? null,
+                    logo: offer.user.companyInfo?.logo ?? null,
+                    primaryColor: offer.user.companyInfo?.primaryColor ?? null,
                 },
                 comments: offer.comments.map((c) => ({
                     id: c.id,
@@ -207,99 +162,42 @@ export class PublicOfferService {
     }
 
     async registerView(token: string, ipAddress?: string, userAgent?: string) {
-        const offer = await prisma.offer.findFirst({
-            where: { publicToken: token, isInteractive: true },
-            select: {
-                id: true,
-                validUntil: true,
-                status: true,
-                userId: true,
-                number: true,
-                title: true,
-                client: { select: { name: true } },
-            },
-        });
-
+        const offer = await publicOfferRepository.findByTokenForView(token);
         if (!offer) return null;
-
-        if (offer.validUntil && new Date(offer.validUntil) < new Date()) {
-            return null;
-        }
+        if (isExpired(offer.validUntil)) return null;
 
         const isFirstView = offer.status === 'SENT';
 
-        const statusUpdate: Record<string, unknown> = {
-            viewCount: { increment: 1 },
-            lastViewedAt: new Date(),
-        };
+        await publicOfferRepository.registerViewTransaction(
+            offer.id,
+            isFirstView,
+            ipAddress ?? null,
+            userAgent ?? null,
+        );
 
         if (isFirstView) {
-            statusUpdate.status = 'VIEWED';
-        }
-
-        await prisma.$transaction([
-            prisma.offerView.create({
-                data: {
+            notificationService
+                .offerViewed(offer.userId, {
                     offerId: offer.id,
-                    ipAddress: ipAddress || null,
-                    userAgent: userAgent || null,
-                },
-            }),
-            prisma.offerInteraction.create({
-                data: {
-                    offerId: offer.id,
-                    type: 'VIEW',
-                    details: { ipAddress, userAgent },
-                },
-            }),
-            prisma.offer.update({
-                where: { id: offer.id },
-                data: statusUpdate,
-            }),
-        ]);
-
-        if (isFirstView) {
-            notificationService.offerViewed(offer.userId, {
-                offerId: offer.id,
-                offerNumber: offer.number,
-                offerTitle: offer.title,
-                clientName: offer.client.name,
-            }).catch((err: unknown) => {
-                console.error('❌ Notification failed (offerViewed):', err);
-            });
+                    offerNumber: offer.number,
+                    offerTitle: offer.title,
+                    clientName: offer.client.name,
+                })
+                .catch((_err: unknown) => {});
         }
 
         return true;
     }
 
     async acceptOffer(options: AcceptOfferOptions) {
-        const { token, selectedItems, selectedVariant, ipAddress, userAgent, clientName, clientEmail } = options;
+        const { token, selectedItems, selectedVariant, ipAddress, userAgent, clientName, clientEmail } =
+            options;
 
-        const offer = await prisma.offer.findFirst({
-            where: { publicToken: token, isInteractive: true },
-            include: {
-                items: { orderBy: { position: 'asc' } },
-                client: { select: { id: true, name: true, company: true, email: true } },
-                user: {
-                    select: {
-                        id: true,
-                        email: true,
-                        name: true,
-                        companyInfo: {
-                            select: { name: true },
-                        },
-                    },
-                },
-            },
-        });
+        const offer = await publicOfferRepository.findByTokenForAccept(token);
 
         if (!offer) return { error: 'NOT_FOUND' as const };
-        if (offer.status === 'ACCEPTED' || offer.status === 'REJECTED') {
-            return { error: 'ALREADY_DECIDED' as const };
-        }
-        if (offer.validUntil && new Date(offer.validUntil) < new Date()) {
-            return { error: 'EXPIRED' as const };
-        }
+        if (isDecided(offer.status)) return { error: 'ALREADY_DECIDED' as const };
+        if (isExpired(offer.validUntil)) return { error: 'EXPIRED' as const };
 
         const hasVariants = offer.items.some((item) => item.variantName);
         const visibleItems = hasVariants
@@ -312,21 +210,15 @@ export class PublicOfferService {
 
         const clientSelectedData = visibleItems.map((item) => {
             const selection = selectedItems.find((s) => s.id === item.id);
-
-            const isSelected = item.isOptional
-                ? (selection?.isSelected ?? item.isSelected)
-                : true;
+            const isSelected = item.isOptional ? (selection?.isSelected ?? item.isSelected) : true;
 
             let quantity = item.quantity;
             if (selection && typeof selection.quantity === 'number' && item.isOptional) {
-                const clampedQty = Math.min(
-                    Math.max(selection.quantity, item.minQuantity),
-                    item.maxQuantity
-                );
-                quantity = new Decimal(clampedQty);
+                const clamped = Math.min(Math.max(selection.quantity, item.minQuantity), item.maxQuantity);
+                quantity = new Decimal(clamped);
             }
 
-            const discount = item.discount || new Decimal(0);
+            const discount = item.discount ?? new Decimal(0);
             const discountMultiplier = new Decimal(1).minus(discount.dividedBy(100));
             const effectivePrice = item.unitPrice.times(discountMultiplier);
 
@@ -362,110 +254,92 @@ export class PublicOfferService {
 
         let contentHash: string | null = null;
 
-        const transactionOps: Prisma.PrismaPromise<unknown>[] = [
-            prisma.offer.update({
-                where: { id: offer.id },
-                data: {
-                    status: 'ACCEPTED',
-                    acceptedAt,
-                    clientSelectedData: {
-                        selectedVariant: selectedVariant || null,
-                        items: clientSelectedData,
-                    } as unknown as Prisma.InputJsonValue,
-                },
-            }),
-            prisma.offerInteraction.create({
-                data: {
-                    offerId: offer.id,
-                    type: 'ACCEPT',
-                    details: {
-                        selectedVariant: selectedVariant || null,
-                        selectedItems: clientSelectedData,
+        const auditLog: Parameters<typeof publicOfferRepository.acceptOfferTransaction>[4] =
+            offer.requireAuditTrail
+                ? (() => {
+                    contentHash = generateContentHash({
+                        offerNumber: offer.number,
+                        items: clientSelectedData.map((item) => ({
+                            name: item.name,
+                            quantity: item.quantity,
+                            unitPrice: item.unitPrice,
+                            vatRate: item.vatRate,
+                            discount: item.discount,
+                            isSelected: item.isSelected,
+                            variantName: item.variantName,
+                        })),
+                        selectedVariant: selectedVariant ?? null,
                         totalNet: netValue,
                         totalVat: vatValue,
                         totalGross: grossValue,
-                    },
-                },
-            }),
-        ];
+                        currency: offer.currency,
+                    });
 
-        if (offer.requireAuditTrail) {
-            contentHash = generateContentHash({
-                offerNumber: offer.number,
-                items: clientSelectedData.map((item) => ({
-                    name: item.name,
-                    quantity: item.quantity,
-                    unitPrice: item.unitPrice,
-                    vatRate: item.vatRate,
-                    discount: item.discount,
-                    isSelected: item.isSelected,
-                    variantName: item.variantName,
-                })),
-                selectedVariant: selectedVariant || null,
+                    return {
+                        ipAddress: ipAddress ?? 'unknown',
+                        userAgent: userAgent ?? 'unknown',
+                        contentHash: contentHash ?? '',
+                        acceptedData: {
+                            selectedVariant: selectedVariant ?? null,
+                            items: clientSelectedData,
+                        } as unknown as Prisma.InputJsonValue,
+                        clientName: clientName ?? offer.client.name,
+                        clientEmail: clientEmail ?? offer.client.email ?? '',
+                        selectedVariant: selectedVariant ?? null,
+                        totalNet: netValue,
+                        totalVat: vatValue,
+                        totalGross: grossValue,
+                        currency: offer.currency,
+                    };
+                })()
+                : null;
+
+        await publicOfferRepository.acceptOfferTransaction(
+            offer.id,
+            acceptedAt,
+            {
+                selectedVariant: selectedVariant ?? null,
+                items: clientSelectedData,
+            } as unknown as Prisma.InputJsonValue,
+            {
+                selectedVariant: selectedVariant ?? null,
+                selectedItems: clientSelectedData,
                 totalNet: netValue,
                 totalVat: vatValue,
                 totalGross: grossValue,
-                currency: offer.currency,
-            });
-
-            transactionOps.push(
-                prisma.offerAcceptanceLog.create({
-                    data: {
-                        offerId: offer.id,
-                        ipAddress: ipAddress || 'unknown',
-                        userAgent: userAgent || 'unknown',
-                        contentHash: contentHash || '',
-                        acceptedData: {
-                            selectedVariant: selectedVariant || null,
-                            items: clientSelectedData,
-                        } as unknown as Prisma.InputJsonValue,
-                        clientName: clientName || offer.client.name,
-                        clientEmail: clientEmail || offer.client.email,
-                        selectedVariant: selectedVariant || null,
-                        totalNet: netValue,
-                        totalVat: vatValue,
-                        totalGross: grossValue,
-                        currency: offer.currency,
-                    },
-                })
-            );
-        }
-
-        await prisma.$transaction(transactionOps);
+            } as unknown as Prisma.InputJsonValue,
+            auditLog,
+        );
 
         triggerPostMortem(offer.user.id, offer.id, 'ACCEPTED', 'public');
 
-        notificationService.offerAccepted(offer.user.id, offer.user.email, {
-            offerId: offer.id,
-            offerNumber: offer.number,
-            offerTitle: offer.title,
-            clientName: offer.client.name,
-            totalGross: grossValue,
-            currency: offer.currency,
-        }).catch((err: unknown) => {
-            console.error('❌ Notification failed (offerAccepted):', err);
-        });
+        notificationService
+            .offerAccepted(offer.user.id, offer.user.email, {
+                offerId: offer.id,
+                offerNumber: offer.number,
+                offerTitle: offer.title,
+                clientName: offer.client.name,
+                totalGross: grossValue,
+                currency: offer.currency,
+            })
+            .catch((_err: unknown) => {});
 
         if (offer.requireAuditTrail && contentHash) {
-            const recipientEmail = clientEmail || offer.client.email;
+            const recipientEmail = clientEmail ?? offer.client.email;
             if (recipientEmail) {
-                this.sendAcceptanceConfirmationEmail(
-                    offer.user.id,
-                    recipientEmail,
-                    {
-                        offerNumber: offer.number,
-                        offerTitle: offer.title,
-                        clientName: clientName || offer.client.name,
-                        totalGross: grossValue,
-                        currency: offer.currency,
-                        contentHash: contentHash || '',
-                        acceptedAt: acceptedAt.toISOString(),
-                        selectedVariant: selectedVariant || null,
-                        publicToken: token,
-                        sellerName: offer.user.name || offer.user.email,
-                        companyName: offer.user.companyInfo?.name || null,
-                    }
-                );
+                this.fireAcceptanceConfirmationEmail(offer.user.id, recipientEmail, {
+                    offerNumber: offer.number,
+                    offerTitle: offer.title,
+                    clientName: clientName ?? offer.client.name,
+                    totalGross: grossValue,
+                    currency: offer.currency,
+                    contentHash,
+                    acceptedAt: acceptedAt.toISOString(),
+                    selectedVariant: selectedVariant ?? null,
+                    publicToken: token,
+                    sellerName: offer.user.name ?? offer.user.email,
+                    companyName: offer.user.companyInfo?.name ?? null,
+                });
             }
         }
 
@@ -478,7 +352,7 @@ export class PublicOfferService {
                 clientName: offer.client.name,
                 clientCompany: offer.client.company,
                 clientEmail: offer.client.email,
-                selectedVariant: selectedVariant || null,
+                selectedVariant: selectedVariant ?? null,
                 totalNet: netValue,
                 totalVat: vatValue,
                 totalGross: grossValue,
@@ -486,62 +360,37 @@ export class PublicOfferService {
                 sellerEmail: offer.user.email,
                 sellerName: offer.user.name,
                 userId: offer.user.id,
-                auditTrail: offer.requireAuditTrail ? {
-                    contentHash,
-                    ipAddress: ipAddress || 'unknown',
-                    acceptedAt: acceptedAt.toISOString(),
-                } : null,
+                auditTrail: offer.requireAuditTrail
+                    ? {
+                        contentHash,
+                        ipAddress: ipAddress ?? 'unknown',
+                        acceptedAt: acceptedAt.toISOString(),
+                    }
+                    : null,
             },
         };
     }
 
     async rejectOffer(token: string, reason?: string) {
-        const offer = await prisma.offer.findFirst({
-            where: { publicToken: token, isInteractive: true },
-            include: {
-                client: { select: { id: true, name: true, company: true } },
-                user: {
-                    select: { id: true, email: true, name: true },
-                },
-            },
-        });
+        const offer = await publicOfferRepository.findByTokenForReject(token);
 
         if (!offer) return { error: 'NOT_FOUND' as const };
-        if (offer.status === 'ACCEPTED' || offer.status === 'REJECTED') {
-            return { error: 'ALREADY_DECIDED' as const };
-        }
-        if (offer.validUntil && new Date(offer.validUntil) < new Date()) {
-            return { error: 'EXPIRED' as const };
-        }
+        if (isDecided(offer.status)) return { error: 'ALREADY_DECIDED' as const };
+        if (isExpired(offer.validUntil)) return { error: 'EXPIRED' as const };
 
-        await prisma.$transaction([
-            prisma.offer.update({
-                where: { id: offer.id },
-                data: {
-                    status: 'REJECTED',
-                    rejectedAt: new Date(),
-                },
-            }),
-            prisma.offerInteraction.create({
-                data: {
-                    offerId: offer.id,
-                    type: 'REJECT',
-                    details: { reason: reason || null },
-                },
-            }),
-        ]);
+        await publicOfferRepository.rejectOfferTransaction(offer.id, reason ?? null);
 
         triggerPostMortem(offer.user.id, offer.id, 'REJECTED', 'public');
 
-        notificationService.offerRejected(offer.user.id, offer.user.email, {
-            offerId: offer.id,
-            offerNumber: offer.number,
-            offerTitle: offer.title,
-            clientName: offer.client.name,
-            reason: reason || undefined,
-        }).catch((err: unknown) => {
-            console.error('❌ Notification failed (offerRejected):', err);
-        });
+        notificationService
+            .offerRejected(offer.user.id, offer.user.email, {
+                offerId: offer.id,
+                offerNumber: offer.number,
+                offerTitle: offer.title,
+                clientName: offer.client.name,
+                reason: reason ?? undefined,
+            })
+            .catch((_err: unknown) => {});
 
         return {
             success: true as const,
@@ -549,7 +398,7 @@ export class PublicOfferService {
                 offerId: offer.id,
                 offerNumber: offer.number,
                 clientName: offer.client.name,
-                reason: reason || null,
+                reason: reason ?? null,
                 sellerEmail: offer.user.email,
                 sellerName: offer.user.name,
                 userId: offer.user.id,
@@ -558,51 +407,21 @@ export class PublicOfferService {
     }
 
     async addComment(token: string, content: string) {
-        const offer = await prisma.offer.findFirst({
-            where: { publicToken: token, isInteractive: true },
-            select: {
-                id: true,
-                validUntil: true,
-                status: true,
-                userId: true,
-                number: true,
-                title: true,
-                client: { select: { name: true } },
-                user: { select: { email: true } },
-            },
-        });
-
+        const offer = await publicOfferRepository.findByTokenForComment(token);
         if (!offer) return null;
-        if (offer.validUntil && new Date(offer.validUntil) < new Date()) {
-            return null;
-        }
+        if (isExpired(offer.validUntil)) return null;
 
-        const [comment] = await prisma.$transaction([
-            prisma.offerComment.create({
-                data: {
-                    offerId: offer.id,
-                    author: 'CLIENT',
-                    content,
-                },
-            }),
-            prisma.offerInteraction.create({
-                data: {
-                    offerId: offer.id,
-                    type: 'COMMENT',
-                    details: { content, author: 'CLIENT' },
-                },
-            }),
-        ]);
+        const comment = await publicOfferRepository.addCommentTransaction(offer.id, content);
 
-        notificationService.offerComment(offer.userId, offer.user.email, {
-            offerId: offer.id,
-            offerNumber: offer.number,
-            offerTitle: offer.title,
-            clientName: offer.client.name,
-            commentPreview: content,
-        }).catch((err: unknown) => {
-            console.error('❌ Notification failed (offerComment):', err);
-        });
+        notificationService
+            .offerComment(offer.userId, offer.user.email, {
+                offerId: offer.id,
+                offerNumber: offer.number,
+                offerTitle: offer.title,
+                clientName: offer.client.name,
+                commentPreview: content,
+            })
+            .catch((_err: unknown) => {});
 
         return {
             comment,
@@ -614,25 +433,17 @@ export class PublicOfferService {
     async trackSelection(
         token: string,
         items: Array<{ id: string; isSelected: boolean; quantity: number }>,
-        selectedVariant?: string
+        selectedVariant?: string,
     ) {
-        const offer = await prisma.offer.findFirst({
-            where: { publicToken: token, isInteractive: true },
-            select: { id: true, validUntil: true },
-        });
-
+        const offer = await publicOfferRepository.findByTokenForTracking(token);
         if (!offer) return null;
-        if (offer.validUntil && new Date(offer.validUntil) < new Date()) {
-            return null;
-        }
+        if (isExpired(offer.validUntil)) return null;
 
-        await prisma.offerInteraction.create({
-            data: {
-                offerId: offer.id,
-                type: 'ITEM_SELECT',
-                details: { items, selectedVariant: selectedVariant || null },
-            },
-        });
+        await publicOfferRepository.trackSelectionInteraction(
+            offer.id,
+            items,
+            selectedVariant ?? null,
+        );
 
         return true;
     }

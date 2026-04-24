@@ -1,4 +1,4 @@
-// smartquote_backend/src/services/email/templates.ts
+// src/services/email/templates.ts
 export interface OfferEmailData {
     readonly offerNumber: string;
     readonly offerTitle: string;
@@ -87,26 +87,34 @@ const baseTemplate = (content: string) => `<!DOCTYPE html>
 </table>
 </body></html>`;
 
-const ctaButton = (url: string, label: string) => `<table cellpadding="0" cellspacing="0" role="presentation" style="margin:24px 0;">
+const ctaButton = (url: string, label: string) =>
+    `<table cellpadding="0" cellspacing="0" role="presentation" style="margin:24px 0;">
 <tr><td style="background:linear-gradient(135deg,#0891b2,#3b82f6);border-radius:10px;padding:14px 28px;">
 <a href="${url}" style="color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;display:inline-block;" target="_blank">${label}</a>
 </td></tr></table>`;
 
-const ctaButtonEmerald = (url: string, label: string) => `<table cellpadding="0" cellspacing="0" role="presentation" style="margin:24px 0;">
+const ctaButtonEmerald = (url: string, label: string) =>
+    `<table cellpadding="0" cellspacing="0" role="presentation" style="margin:24px 0;">
 <tr><td style="background:linear-gradient(135deg,#059669,#0d9488);border-radius:10px;padding:14px 28px;">
 <a href="${url}" style="color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;display:inline-block;" target="_blank">${label}</a>
 </td></tr></table>`;
 
-const ctaButtonAmber = (url: string, label: string) => `<table cellpadding="0" cellspacing="0" role="presentation" style="margin:24px 0;">
+const ctaButtonAmber = (url: string, label: string) =>
+    `<table cellpadding="0" cellspacing="0" role="presentation" style="margin:24px 0;">
 <tr><td style="background:linear-gradient(135deg,#d97706,#ea580c);border-radius:10px;padding:14px 28px;">
 <a href="${url}" style="color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;display:inline-block;" target="_blank">${label}</a>
 </td></tr></table>`;
 
-const formatCurrency = (amount: number, currency = 'PLN') =>
-    new Intl.NumberFormat('pl-PL', { style: 'currency', currency, minimumFractionDigits: 2 }).format(amount);
+function formatCurrency(amount: number, currency = 'PLN'): string {
+    return new Intl.NumberFormat('pl-PL', {
+        style: 'currency',
+        currency,
+        minimumFractionDigits: 2,
+    }).format(amount);
+}
 
-const formatDateTime = (isoString: string) =>
-    new Date(isoString).toLocaleString('pl-PL', {
+function formatDateTime(isoString: string): string {
+    return new Date(isoString).toLocaleString('pl-PL', {
         day: '2-digit',
         month: 'long',
         year: 'numeric',
@@ -114,31 +122,93 @@ const formatDateTime = (isoString: string) =>
         minute: '2-digit',
         second: '2-digit',
     });
+}
+
+function formatDate(isoString: string): string {
+    return new Date(isoString).toLocaleDateString('pl-PL', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+    });
+}
+
+function sellerSignature(sellerName: string, companyName: string | null): string {
+    return `<p style="color:#94a3b8;font-size:12px;margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0;">
+Pozdrawiam,<br/>
+<strong style="color:#475569;">${sellerName}</strong>
+${companyName ? `<br/><span style="color:#64748b;">${companyName}</span>` : ''}
+</p>`;
+}
+
+function infoCard(rows: string): string {
+    return `<table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">${rows}</table>`;
+}
+
+function infoRow(label: string, value: string): string {
+    return `<tr><td style="padding:0 16px 16px;">
+<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">${label}</p>
+<p style="margin:0;color:#0f172a;font-size:14px;">${value}</p>
+</td></tr>`;
+}
+
+function infoRowFirst(label: string, title: string, subtitle: string): string {
+    return `<tr><td style="padding:16px;">
+<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">${label}</p>
+<p style="margin:0;color:#0f172a;font-size:15px;font-weight:600;">${title}</p>
+<p style="margin:4px 0 0;color:#64748b;font-size:13px;">${subtitle}</p>
+</td></tr>`;
+}
+
+function priceRow(label: string, value: string, color: string): string {
+    return `<tr><td style="padding:0 16px 16px;">
+<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">${label}</p>
+<p style="margin:0;color:${color};font-size:20px;font-weight:700;">${value}</p>
+</td></tr>`;
+}
+
+const TYPE_LABELS: Record<string, string> = {
+    CALL: 'Telefon',
+    EMAIL: 'Email',
+    MEETING: 'Spotkanie',
+    TASK: 'Zadanie',
+    REMINDER: 'Przypomnienie',
+    OTHER: 'Inne',
+};
+
+const PRIORITY_LABELS: Record<string, string> = {
+    URGENT: 'Pilny',
+    HIGH: 'Wysoki',
+    MEDIUM: 'Średni',
+    LOW: 'Niski',
+};
+
+const PRIORITY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+    URGENT: { bg: '#fef2f2', text: '#991b1b', border: '#fecaca' },
+    HIGH: { bg: '#fff7ed', text: '#9a3412', border: '#fed7aa' },
+    MEDIUM: { bg: '#eff6ff', text: '#1e40af', border: '#bfdbfe' },
+    LOW: { bg: '#f8fafc', text: '#475569', border: '#e2e8f0' },
+};
 
 export const emailTemplates = {
-    offerAccepted: (data: OfferAcceptedEmailData, url: string) => {
+    offerAccepted(data: OfferAcceptedEmailData, url: string) {
         const html = baseTemplate(`
 <div style="text-align:center;margin-bottom:24px;">
 <div style="width:56px;height:56px;background:#ecfdf5;border-radius:28px;line-height:56px;text-align:center;font-size:28px;display:inline-block;margin-bottom:12px;">Check</div>
 <h2 style="margin:0;color:#0f172a;font-size:20px;font-weight:700;">Oferta zaakceptowana!</h2>
 </div>
 <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 16px;">Klient <strong>${data.clientName}</strong> zaakceptował ofertę:</p>
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">
-<tr><td style="padding:16px;">
-<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Oferta</p>
-<p style="margin:0;color:#0f172a;font-size:15px;font-weight:600;">${data.offerTitle}</p>
-<p style="margin:4px 0 0;color:#64748b;font-size:13px;">${data.offerNumber}</p>
-</td></tr>
-<tr><td style="padding:0 16px 16px;">
-<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Wartość brutto</p>
-<p style="margin:0;color:#0891b2;font-size:20px;font-weight:700;">${formatCurrency(data.totalGross, data.currency)}</p>
-</td></tr>
-</table>
+${infoCard(`
+${infoRowFirst('Oferta', data.offerTitle, data.offerNumber)}
+${priceRow('Wartość brutto', formatCurrency(data.totalGross, data.currency), '#0891b2')}
+`)}
 ${ctaButton(url, 'Zobacz ofertę →')}`);
-        return { subject: `Oferta ${data.offerNumber} zaakceptowana przez ${data.clientName}`, html };
+        return {
+            subject: `Oferta ${data.offerNumber} zaakceptowana przez ${data.clientName}`,
+            html,
+        };
     },
 
-    offerRejected: (data: OfferRejectedEmailData, url: string) => {
+    offerRejected(data: OfferRejectedEmailData, url: string) {
         const reasonBlock = data.reason
             ? `<table width="100%" cellpadding="0" cellspacing="0" style="background:#fef2f2;border-radius:12px;border:1px solid #fecaca;margin-top:16px;">
 <tr><td style="padding:16px;">
@@ -153,19 +223,16 @@ ${ctaButton(url, 'Zobacz ofertę →')}`);
 <h2 style="margin:0;color:#0f172a;font-size:20px;font-weight:700;">Oferta odrzucona</h2>
 </div>
 <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 16px;">Klient <strong>${data.clientName}</strong> odrzucił ofertę:</p>
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">
-<tr><td style="padding:16px;">
-<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Oferta</p>
-<p style="margin:0;color:#0f172a;font-size:15px;font-weight:600;">${data.offerTitle}</p>
-<p style="margin:4px 0 0;color:#64748b;font-size:13px;">${data.offerNumber}</p>
-</td></tr>
-</table>
+${infoCard(infoRowFirst('Oferta', data.offerTitle, data.offerNumber))}
 ${reasonBlock}
 ${ctaButton(url, 'Zobacz szczegóły →')}`);
-        return { subject: `Oferta ${data.offerNumber} odrzucona przez ${data.clientName}`, html };
+        return {
+            subject: `Oferta ${data.offerNumber} odrzucona przez ${data.clientName}`,
+            html,
+        };
     },
 
-    newComment: (data: CommentEmailData, url: string) => {
+    newComment(data: CommentEmailData, url: string) {
         const html = baseTemplate(`
 <div style="text-align:center;margin-bottom:24px;">
 <div style="width:56px;height:56px;background:#eff6ff;border-radius:28px;line-height:56px;text-align:center;font-size:28px;display:inline-block;margin-bottom:12px;">Speech Bubble</div>
@@ -178,16 +245,16 @@ ${ctaButton(url, 'Zobacz szczegóły →')}`);
 </td></tr>
 </table>
 ${ctaButton(url, 'Odpowiedz →')}`);
-        return { subject: `Nowy komentarz od ${data.clientName} — oferta ${data.offerNumber}`, html };
+        return {
+            subject: `Nowy komentarz od ${data.clientName} — oferta ${data.offerNumber}`,
+            html,
+        };
     },
 
-    offerLink: (data: OfferLinkEmailData) => {
-        const senderLabel = data.companyName || data.sellerName;
+    offerLink(data: OfferLinkEmailData) {
+        const senderLabel = data.companyName ?? data.sellerName;
         const validUntilBlock = data.validUntil
-            ? `<tr><td style="padding:0 16px 16px;">
-<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Ważna do</p>
-<p style="margin:0;color:#0f172a;font-size:14px;">${new Date(data.validUntil).toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
-</td></tr>`
+            ? infoRow('Ważna do', formatDate(data.validUntil))
             : '';
 
         const html = baseTemplate(`
@@ -195,36 +262,25 @@ ${ctaButton(url, 'Odpowiedz →')}`);
 <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px;">
 ${senderLabel} przygotował dla Ciebie ofertę handlową. Kliknij poniższy przycisk, aby zapoznać się ze szczegółami.
 </p>
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">
-<tr><td style="padding:16px;">
-<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Oferta</p>
-<p style="margin:0;color:#0f172a;font-size:15px;font-weight:600;">${data.offerTitle}</p>
-<p style="margin:4px 0 0;color:#64748b;font-size:13px;">${data.offerNumber}</p>
-</td></tr>
-<tr><td style="padding:0 16px 16px;">
-<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Wartość brutto</p>
-<p style="margin:0;color:#0891b2;font-size:20px;font-weight:700;">${formatCurrency(data.totalGross, data.currency)}</p>
-</td></tr>
+${infoCard(`
+${infoRowFirst('Oferta', data.offerTitle, data.offerNumber)}
+${priceRow('Wartość brutto', formatCurrency(data.totalGross, data.currency), '#0891b2')}
 ${validUntilBlock}
-</table>
+`)}
 ${ctaButton(data.publicUrl, 'Zobacz ofertę →')}
 <p style="color:#64748b;font-size:13px;line-height:1.6;margin:16px 0 0;">
 Na stronie oferty możesz przeglądać pozycje, wybierać opcje, zadawać pytania i zaakceptować lub odrzucić ofertę.
 </p>
-<p style="color:#94a3b8;font-size:12px;margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0;">
-Pozdrawiam,<br/>
-<strong style="color:#475569;">${data.sellerName}</strong>
-${data.companyName ? `<br/><span style="color:#64748b;">${data.companyName}</span>` : ''}
-</p>`);
-        return { subject: `Oferta ${data.offerNumber} — ${data.offerTitle} | ${senderLabel}`, html };
+${sellerSignature(data.sellerName, data.companyName)}`);
+        return {
+            subject: `Oferta ${data.offerNumber} — ${data.offerTitle} | ${senderLabel}`,
+            html,
+        };
     },
 
-    acceptanceConfirmation: (data: AcceptanceConfirmationEmailData) => {
+    acceptanceConfirmation(data: AcceptanceConfirmationEmailData) {
         const variantBlock = data.selectedVariant
-            ? `<tr><td style="padding:0 16px 16px;">
-<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Wybrany wariant</p>
-<p style="margin:0;color:#0f172a;font-size:14px;font-weight:600;">${data.selectedVariant}</p>
-</td></tr>`
+            ? infoRow('Wybrany wariant', `<strong>${data.selectedVariant}</strong>`)
             : '';
 
         const html = baseTemplate(`
@@ -235,22 +291,12 @@ ${data.companyName ? `<br/><span style="color:#64748b;">${data.companyName}</spa
 <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px;">
 Dzień dobry${data.clientName ? `, ${data.clientName}` : ''}! Potwierdzamy przyjęcie Twojej akceptacji oferty.
 </p>
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">
-<tr><td style="padding:16px;">
-<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Oferta</p>
-<p style="margin:0;color:#0f172a;font-size:15px;font-weight:600;">${data.offerTitle}</p>
-<p style="margin:4px 0 0;color:#64748b;font-size:13px;">${data.offerNumber}</p>
-</td></tr>
-<tr><td style="padding:0 16px 16px;">
-<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Wartość brutto</p>
-<p style="margin:0;color:#0891b2;font-size:20px;font-weight:700;">${formatCurrency(data.totalGross, data.currency)}</p>
-</td></tr>
+${infoCard(`
+${infoRowFirst('Oferta', data.offerTitle, data.offerNumber)}
+${priceRow('Wartość brutto', formatCurrency(data.totalGross, data.currency), '#0891b2')}
 ${variantBlock}
-<tr><td style="padding:0 16px 16px;">
-<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Data akceptacji</p>
-<p style="margin:0;color:#0f172a;font-size:14px;">${formatDateTime(data.acceptedAt)}</p>
-</td></tr>
-</table>
+${infoRow('Data akceptacji', formatDateTime(data.acceptedAt))}
+`)}
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0fdf4;border-radius:12px;border:1px solid #bbf7d0;margin-top:16px;">
 <tr><td style="padding:16px;">
 <p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Cyfrowy odcisk treści (SHA-256)</p>
@@ -263,15 +309,11 @@ Każda zmiana w treści oferty spowodowałaby wygenerowanie innego hasha — co 
 że dokument nie został zmodyfikowany po akceptacji.
 </p>
 ${ctaButton(data.publicUrl, 'Zobacz ofertę i pobierz PDF →')}
-<p style="color:#94a3b8;font-size:12px;margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0;">
-Pozdrawiam,<br/>
-<strong style="color:#475569;">${data.sellerName}</strong>
-${data.companyName ? `<br/><span style="color:#64748b;">${data.companyName}</span>` : ''}
-</p>`);
+${sellerSignature(data.sellerName, data.companyName)}`);
         return { subject: `Potwierdzenie akceptacji oferty ${data.offerNumber}`, html };
     },
 
-    signatureConfirmation: (data: SignatureConfirmationEmailData) => {
+    signatureConfirmation(data: SignatureConfirmationEmailData) {
         const html = baseTemplate(`
 <div style="text-align:center;margin-bottom:24px;">
 <div style="width:56px;height:56px;background:#ecfdf5;border-radius:28px;line-height:56px;text-align:center;font-size:28px;display:inline-block;margin-bottom:12px;">Pen</div>
@@ -280,21 +322,11 @@ ${data.companyName ? `<br/><span style="color:#64748b;">${data.companyName}</spa
 <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px;">
 Dzień dobry${data.signerName ? `, ${data.signerName}` : ''}! Potwierdzamy złożenie podpisu elektronicznego pod umową.
 </p>
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">
-<tr><td style="padding:16px;">
-<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Umowa</p>
-<p style="margin:0;color:#0f172a;font-size:15px;font-weight:600;">${data.contractTitle}</p>
-<p style="margin:4px 0 0;color:#64748b;font-size:13px;">${data.contractNumber}</p>
-</td></tr>
-<tr><td style="padding:0 16px 16px;">
-<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Wartość brutto</p>
-<p style="margin:0;color:#059669;font-size:20px;font-weight:700;">${formatCurrency(data.totalGross, data.currency)}</p>
-</td></tr>
-<tr><td style="padding:0 16px 16px;">
-<p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Data podpisu</p>
-<p style="margin:0;color:#0f172a;font-size:14px;">${formatDateTime(data.signedAt)}</p>
-</td></tr>
-</table>
+${infoCard(`
+${infoRowFirst('Umowa', data.contractTitle, data.contractNumber)}
+${priceRow('Wartość brutto', formatCurrency(data.totalGross, data.currency), '#059669')}
+${infoRow('Data podpisu', formatDateTime(data.signedAt))}
+`)}
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0fdf4;border-radius:12px;border:1px solid #bbf7d0;margin-top:16px;">
 <tr><td style="padding:16px;">
 <p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Cyfrowy odcisk treści (SHA-256)</p>
@@ -307,53 +339,28 @@ Każda zmiana w treści umowy spowodowałaby wygenerowanie innego hasha — co p
 że dokument nie został zmodyfikowany po podpisaniu.
 </p>
 ${ctaButtonEmerald(data.publicUrl, 'Zobacz umowę i pobierz PDF →')}
-<p style="color:#94a3b8;font-size:12px;margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0;">
-Pozdrawiam,<br/>
-<strong style="color:#475569;">${data.sellerName}</strong>
-${data.companyName ? `<br/><span style="color:#64748b;">${data.companyName}</span>` : ''}
-</p>`);
+${sellerSignature(data.sellerName, data.companyName)}`);
         return { subject: `Potwierdzenie podpisu umowy ${data.contractNumber}`, html };
     },
 
-    followUpReminder: (data: FollowUpReminderEmailData, url: string) => {
-        const typeLabels: Record<string, string> = {
-            CALL: 'Telefon',
-            EMAIL: 'Email',
-            MEETING: 'Spotkanie',
-            TASK: 'Zadanie',
-            REMINDER: 'Przypomnienie',
-            OTHER: 'Inne',
-        };
-
-        const priorityLabels: Record<string, string> = {
-            URGENT: 'Pilny',
-            HIGH: 'Wysoki',
-            MEDIUM: 'Średni',
-            LOW: 'Niski',
-        };
-
-        const priorityColors: Record<string, { bg: string; text: string; border: string }> = {
-            URGENT: { bg: '#fef2f2', text: '#991b1b', border: '#fecaca' },
-            HIGH: { bg: '#fff7ed', text: '#9a3412', border: '#fed7aa' },
-            MEDIUM: { bg: '#eff6ff', text: '#1e40af', border: '#bfdbfe' },
-            LOW: { bg: '#f8fafc', text: '#475569', border: '#e2e8f0' },
-        };
-
-        const typeLabel = typeLabels[data.type] || data.type;
-        const priorityLabel = priorityLabels[data.priority] || data.priority;
-        const pColor = priorityColors[data.priority] || priorityColors.MEDIUM;
+    followUpReminder(data: FollowUpReminderEmailData, url: string) {
+        const typeLabel = TYPE_LABELS[data.type] ?? data.type;
+        const priorityLabel = PRIORITY_LABELS[data.priority] ?? data.priority;
+        const pColor = PRIORITY_COLORS[data.priority] ?? PRIORITY_COLORS.MEDIUM;
 
         const contextLines: string[] = [];
         if (data.clientName) contextLines.push(`<strong>Klient:</strong> ${data.clientName}`);
         if (data.offerNumber) contextLines.push(`<strong>Oferta:</strong> ${data.offerNumber}`);
-        if (data.contractNumber) contextLines.push(`<strong>Umowa:</strong> ${data.contractNumber}`);
+        if (data.contractNumber)
+            contextLines.push(`<strong>Umowa:</strong> ${data.contractNumber}`);
 
-        const contextBlock = contextLines.length > 0
-            ? `<tr><td style="padding:0 16px 16px;">
+        const contextBlock =
+            contextLines.length > 0
+                ? `<tr><td style="padding:0 16px 16px;">
 <p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Powiązania</p>
-${contextLines.map(l => `<p style="margin:0 0 4px;color:#475569;font-size:13px;line-height:1.5;">${l}</p>`).join('')}
+${contextLines.map((l) => `<p style="margin:0 0 4px;color:#475569;font-size:13px;line-height:1.5;">${l}</p>`).join('')}
 </td></tr>`
-            : '';
+                : '';
 
         const html = baseTemplate(`
 <div style="text-align:center;margin-bottom:24px;">
@@ -361,7 +368,7 @@ ${contextLines.map(l => `<p style="margin:0 0 4px;color:#475569;font-size:13px;l
 <h2 style="margin:0;color:#0f172a;font-size:20px;font-weight:700;">Zaległy follow-up</h2>
 </div>
 <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 16px;">Masz zaległy follow-up, który wymaga Twojej uwagi:</p>
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">
+${infoCard(`
 <tr><td style="padding:16px;">
 <p style="margin:0 0 4px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Tytuł</p>
 <p style="margin:0;color:#0f172a;font-size:15px;font-weight:600;">${data.followUpTitle}</p>
@@ -381,7 +388,7 @@ ${contextLines.map(l => `<p style="margin:0 0 4px;color:#475569;font-size:13px;l
 <p style="margin:0;color:#dc2626;font-size:14px;font-weight:600;">Warning ${data.dueDateFormatted} (zaległy)</p>
 </td></tr>
 ${contextBlock}
-</table>
+`)}
 ${ctaButtonAmber(url, 'Sprawdź follow-upy →')}`);
         return { subject: `Zaległy follow-up: ${data.followUpTitle}`, html };
     },

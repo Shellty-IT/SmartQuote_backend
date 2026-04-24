@@ -1,10 +1,9 @@
+// src/middleware/validate.ts
 import { Request, Response, NextFunction } from 'express';
-import { z, ZodError, ZodIssue } from 'zod';
-import { errorResponse } from '../utils/apiResponse';
+import { z } from 'zod';
 
-// ✅ POPRAWKA: Użyj z.ZodType zamiast AnyZodObject
-export function validate(schema: z.ZodType<any, any, any>) {
-    return async (req: Request, res: Response, next: NextFunction) => {
+export function validate(schema: z.ZodType<unknown, z.ZodTypeDef, unknown>) {
+    return async (req: Request, _res: Response, next: NextFunction) => {
         try {
             await schema.parseAsync({
                 body: req.body,
@@ -12,15 +11,8 @@ export function validate(schema: z.ZodType<any, any, any>) {
                 params: req.params,
             });
             next();
-        } catch (error) {
-            if (error instanceof ZodError) {
-                const errors = error.issues.map((issue: ZodIssue) => ({
-                    field: issue.path.join('.'),
-                    message: issue.message,
-                }));
-                return errorResponse(res, 'VALIDATION_ERROR', 'Dane nie przeszły walidacji', 400, errors);
-            }
-            next(error);
+        } catch (err) {
+            next(err);
         }
     };
 }

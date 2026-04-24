@@ -1,7 +1,8 @@
-// smartquote_backend/src/services/ai/chat.ts
+// src/services/ai/chat.ts
 import { GoogleGenAI } from '@google/genai';
 import prisma from '../../lib/prisma';
 import { aiCache, CACHE_TTL, buildCacheKey } from '../../lib/cache';
+import { createModuleLogger } from '../../lib/logger';
 import {
     AIMessage,
     AIContext,
@@ -13,7 +14,7 @@ import {
     EmailGenerationContext,
     EmailType,
 } from '../../types';
-import { callGemini, extractJson, safeJsonParse, initAI } from './core';
+import { callGemini, extractJson, safeJsonParse } from './core';
 import {
     buildSystemPrompt,
     buildChatPrompt,
@@ -21,6 +22,15 @@ import {
     buildEmailPrompt,
     buildClientAnalysisPrompt,
 } from './prompts';
+
+const log = createModuleLogger('ai:chat');
+
+function buildMonthStart(): Date {
+    const d = new Date();
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    return d;
+}
 
 export async function getUserContext(userId: string): Promise<AIContext> {
     const [clients, offers, contracts, followUps] = await Promise.all([
@@ -80,10 +90,6 @@ export async function getUserContext(userId: string): Promise<AIContext> {
         }),
     ]);
 
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-
     const [totalClients, activeOffers, pendingFollowUps, revenueResult] = await Promise.all([
         prisma.client.count({ where: { userId } }),
         prisma.offer.count({
@@ -93,11 +99,7 @@ export async function getUserContext(userId: string): Promise<AIContext> {
             where: { userId, status: 'PENDING', dueDate: { lte: new Date() } },
         }),
         prisma.offer.aggregate({
-            where: {
-                userId,
-                status: 'ACCEPTED',
-                updatedAt: { gte: startOfMonth },
-            },
+            where: { userId, status: 'ACCEPTED', updatedAt: { gte: buildMonthStart() } },
             _sum: { totalGross: true },
         }),
     ]);
@@ -106,7 +108,7 @@ export async function getUserContext(userId: string): Promise<AIContext> {
         totalClients,
         activeOffers,
         pendingFollowUps,
-        monthlyRevenue: revenueResult._sum.totalGross?.toNumber() || 0,
+        monthlyRevenue: revenueResult._sum.totalGross?.toNumber() ?? 0,
     };
 
     return { userId, clients, offers, contracts, followUps, stats };
@@ -167,7 +169,9 @@ function generateSuggestions(message: string, context: AIContext): string[] {
     }
 
     if (context.stats?.pendingFollowUps && context.stats.pendingFollowUps > 0) {
-        suggestions.push(`Mam ${context.stats.pendingFollowUps} zaległych follow-upów. Co powinienem zrobić?`);
+        suggestions.push(
+            `Mam ${context.stats.pendingFollowUps} zaległych follow-upów. Co powinienem zrobić?`,
+        );
     }
 
     if (suggestions.length === 0) {
@@ -179,15 +183,46 @@ function generateSuggestions(message: string, context: AIContext): string[] {
     return suggestions.slice(0, 3);
 }
 
+function resolveAIErrorMessage(error: unknown): AIResponse {
+    const msg = error instanceof Error ? error.message : '';
+
+    if (msg.includes('API_KEY') || msg.includes('API key')) {
+        return {
+            message: '❌ Nieprawidłowy klucz API. Sprawdź konfigurację GEMINI_API_KEY.',
+            suggestions: [],
+        };
+    }
+
+    if (msg.includes('quota') || msg.includes('limit')) {
+        return {
+            message: '❌ Przekroczono limit zapytań do AI. Spróbuj ponownie później.',
+            suggestions: [],
+        };
+    }
+
+    if (msg.includes('not found') || msg.includes('404')) {
+        return {
+            message: '❌ Model AI nie został znaleziony. Sprawdź konfigurację GEMINI_MODEL.',
+            suggestions: [],
+        };
+    }
+
+    return {
+        message: '❌ Wystąpił błąd podczas komunikacji z AI. Spróbuj ponownie.',
+        suggestions: ['Spróbuj ponownie', 'Zadaj inne pytanie'],
+    };
+}
+
 export async function chat(
     ai: GoogleGenAI | null,
     userId: string,
     message: string,
-    conversationHistory: AIMessage[] = []
+    conversationHistory: AIMessage[] = [],
 ): Promise<AIResponse> {
     if (!ai) {
         return {
-            message: '⚠️ AI Asystent nie jest skonfigurowany. Dodaj GEMINI_API_KEY do zmiennych środowiskowych.',
+            message:
+                '⚠️ AI Asystent nie jest skonfigurowany. Dodaj GEMINI_API_KEY do zmiennych środowiskowych.',
             suggestions: ['Skontaktuj się z administratorem'],
         };
     }
@@ -203,60 +238,30 @@ export async function chat(
 
         return { message: cleanMessage, suggestions, actions };
     } catch (error: unknown) {
-        console.error('❌ AI Service Error:', error);
-
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-        if (errorMessage.includes('API_KEY') || errorMessage.includes('API key')) {
-            return {
-                message: '❌ Nieprawidłowy klucz API. Sprawdź konfigurację GEMINI_API_KEY.',
-                suggestions: [],
-            };
-        }
-
-        if (errorMessage.includes('quota') || errorMessage.includes('limit')) {
-            return {
-                message: '❌ Przekroczono limit zapytań do AI. Spróbuj ponownie później.',
-                suggestions: [],
-            };
-        }
-
-        if (errorMessage.includes('not found') || errorMessage.includes('404')) {
-            return {
-                message: '❌ Model AI nie został znaleziony. Sprawdź konfigurację GEMINI_MODEL.',
-                suggestions: [],
-            };
-        }
-
-        return {
-            message: '❌ Wystąpił błąd podczas komunikacji z AI. Spróbuj ponownie.',
-            suggestions: ['Spróbuj ponownie', 'Zadaj inne pytanie'],
-        };
+        log.error({ error, userId }, 'AI chat failed');
+        return resolveAIErrorMessage(error);
     }
 }
 
 export async function generateOffer(
     ai: GoogleGenAI | null,
-    description: string
+    description: string,
 ): Promise<GeneratedOffer> {
     if (!ai) throw new Error('AI nie jest skonfigurowany');
 
-    try {
-        const prompt = buildOfferGenerationPrompt(description);
-        const responseText = await callGemini(ai, prompt);
-        const parsed = extractJson(responseText);
-        if (parsed) return parsed as GeneratedOffer;
-        throw new Error('Nie udało się wygenerować oferty');
-    } catch (error: unknown) {
-        console.error('Generate offer error:', error);
-        throw error;
-    }
+    const prompt = buildOfferGenerationPrompt(description);
+    const responseText = await callGemini(ai, prompt);
+    const parsed = extractJson(responseText);
+
+    if (!parsed) throw new Error('Nie udało się wygenerować oferty');
+
+    return parsed as GeneratedOffer;
 }
 
 export async function generateEmail(
     ai: GoogleGenAI | null,
     type: EmailType,
-    context: EmailGenerationContext
+    context: EmailGenerationContext,
 ): Promise<string> {
     if (!ai) throw new Error('AI nie jest skonfigurowany');
 
@@ -267,7 +272,7 @@ export async function generateEmail(
 export async function analyzeClient(
     ai: GoogleGenAI | null,
     userId: string,
-    clientId: string
+    clientId: string,
 ): Promise<ClientAnalysis> {
     if (!ai) throw new Error('AI nie jest skonfigurowany');
 
@@ -292,16 +297,16 @@ export async function analyzeClient(
         type: client.type,
         email: client.email,
         isActive: client.isActive,
-        offers: client.offers.map(o => ({
+        offers: client.offers.map((o) => ({
             title: o.title,
             status: o.status,
             totalGross: o.totalGross,
         })),
-        contracts: client.contracts.map(c => ({
+        contracts: client.contracts.map((c) => ({
             title: c.title,
             status: c.status,
         })),
-        followUps: client.followUps.map(f => ({
+        followUps: client.followUps.map((f) => ({
             title: f.title,
             status: f.status,
             type: f.type,
@@ -311,11 +316,9 @@ export async function analyzeClient(
     const responseText = await callGemini(ai, prompt);
     const parsed = extractJson(responseText);
 
-    let result: ClientAnalysis;
-    if (parsed) {
-        result = parsed as ClientAnalysis;
-    } else {
-        result = {
+    const result: ClientAnalysis = parsed
+        ? (parsed as ClientAnalysis)
+        : {
             score: 5,
             potential: 'sredni',
             summary: responseText,
@@ -323,7 +326,6 @@ export async function analyzeClient(
             nextAction: 'Skontaktuj się z klientem',
             risks: [],
         };
-    }
 
     aiCache.set(cacheKey, result, CACHE_TTL.CLIENT_ANALYSIS);
     return result;

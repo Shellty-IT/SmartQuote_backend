@@ -1,17 +1,21 @@
 // src/index.ts
-
 import app from './app';
 import { config } from './config';
 import prisma from './lib/prisma';
+import { logger } from './lib/logger';
 
 const server = app.listen(config.port, () => {
-    console.log(
-        `[${new Date().toISOString()}] 🚀 Serwer uruchomiony na porcie ${config.port} [${config.nodeEnv}]`,
+    logger.info(
+        {
+            port: config.port,
+            env: config.nodeEnv,
+        },
+        'Server started',
     );
 });
 
 async function shutdown(signal: string): Promise<void> {
-    console.log(`\n[${new Date().toISOString()}] 🛑 Otrzymano sygnał ${signal} — zamykanie serwera...`);
+    logger.info({ signal }, 'Shutdown initiated');
 
     await new Promise<void>((resolve, reject) => {
         server.close((err) => {
@@ -23,34 +27,34 @@ async function shutdown(signal: string): Promise<void> {
         });
     });
 
-    console.log(`[${new Date().toISOString()}] ✅ Serwer HTTP zamknięty`);
+    logger.info('HTTP server closed');
 
     await prisma.$disconnect();
-    console.log(`[${new Date().toISOString()}] ✅ Połączenie z bazą danych zamknięte`);
+    logger.info('Database connection closed');
 
     process.exit(0);
 }
 
 process.on('SIGTERM', () => {
     shutdown('SIGTERM').catch((err: unknown) => {
-        console.error('Błąd podczas zamykania:', err);
+        logger.fatal({ err }, 'Shutdown failed');
         process.exit(1);
     });
 });
 
 process.on('SIGINT', () => {
     shutdown('SIGINT').catch((err: unknown) => {
-        console.error('Błąd podczas zamykania:', err);
+        logger.fatal({ err }, 'Shutdown failed');
         process.exit(1);
     });
 });
 
 process.on('uncaughtException', (err: Error) => {
-    console.error(`[${new Date().toISOString()}] 💥 uncaughtException:`, err);
+    logger.fatal({ err }, 'Uncaught exception');
     shutdown('uncaughtException').catch(() => process.exit(1));
 });
 
 process.on('unhandledRejection', (reason: unknown) => {
-    console.error(`[${new Date().toISOString()}] 💥 unhandledRejection:`, reason);
+    logger.fatal({ reason }, 'Unhandled rejection');
     shutdown('unhandledRejection').catch(() => process.exit(1));
 });

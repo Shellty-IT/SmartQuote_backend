@@ -1,7 +1,7 @@
 // src/services/offers.service.ts
-
-import crypto from 'crypto';
+import { randomBytes } from 'crypto';
 import { OfferStatus } from '@prisma/client';
+import { config } from '../config';
 import { offersRepository, OfferItemData, UpdateOfferData } from '../repositories/offers.repository';
 import { CreateOfferInput, UpdateOfferInput, OfferItemInput } from '../types';
 import { generateOfferNumber } from '../utils/offerNumber';
@@ -10,6 +10,10 @@ import { getDecryptedSmtpConfig } from './settings.service';
 import { buildItemWithTotals, calculateOfferTotals, ItemWithTotals } from './shared/offer-calculations';
 import { triggerPostMortem } from './shared/postmortem.utils';
 import { NotFoundError, ValidationError, ExternalServiceError } from '../errors/domain.errors';
+import { mapToPDFUser, mapToPDFClient } from './pdf/data-mapper';
+import { pdfService } from './pdf';
+
+const frontendUrl = config.frontendUrl.replace(/\/$/, '');
 
 function mapItemToData(item: ItemWithTotals): OfferItemData {
     return {
@@ -32,37 +36,24 @@ function mapItemToData(item: ItemWithTotals): OfferItemData {
     };
 }
 
+function buildItemsWithTotals(items: OfferItemInput[]): ItemWithTotals[] {
+    return items.map((item, index) => buildItemWithTotals(item, index));
+}
+
+function getStatusTimestampKey(status: string): keyof UpdateOfferData | null {
+    const map: Partial<Record<string, keyof UpdateOfferData>> = {
+        SENT: 'sentAt',
+        VIEWED: 'viewedAt',
+        ACCEPTED: 'acceptedAt',
+        REJECTED: 'rejectedAt',
+    };
+    return map[status] ?? null;
+}
+
 export class OffersService {
     async create(userId: string, data: CreateOfferInput) {
-        const client = await offersRepository.findById(data.clientId, userId).catch(() => null);
-
-        const clientExists = await offersRepository
-            .findAll({ userId, clientId: data.clientId, limit: '1', page: '1' })
-            .then(() => true)
-            .catch(() => false);
-
-        void clientExists;
-
-        const clientRecord = await (async () => {
-            const result = await offersRepository.findAll({
-                userId,
-                clientId: data.clientId,
-                limit: '1',
-                page: '1',
-            });
-            return result.offers.length > 0 || data.clientId;
-        })();
-
-        if (!clientRecord) {
-            throw new NotFoundError('Klient');
-        }
-
         const number = await generateOfferNumber(userId);
-
-        const itemsWithTotals = data.items.map((item: OfferItemInput, index: number) =>
-            buildItemWithTotals(item, index),
-        );
-
+        const itemsWithTotals = buildItemsWithTotals(data.items);
         const offerTotals = calculateOfferTotals(itemsWithTotals);
 
         return offersRepository.create({
@@ -89,10 +80,7 @@ export class OffersService {
         return offer;
     }
 
-    async findAll(
-        userId: string,
-        query: Record<string, string | undefined>,
-    ) {
+    async findAll(userId: string, query: Record<string, string | undefined>) {
         return offersRepository.findAll({ userId, ...query });
     }
 
@@ -117,26 +105,16 @@ export class OffersService {
 
         if (data.status) {
             updateData.status = data.status as OfferStatus;
-            const now = new Date();
-            const statusTimestamps: Partial<Record<string, keyof UpdateOfferData>> = {
-                SENT: 'sentAt',
-                VIEWED: 'viewedAt',
-                ACCEPTED: 'acceptedAt',
-                REJECTED: 'rejectedAt',
-            };
-            const timestampKey = statusTimestamps[data.status];
+            const timestampKey = getStatusTimestampKey(data.status);
             if (timestampKey) {
-                (updateData as Record<string, unknown>)[timestampKey] = now;
+                (updateData as Record<string, unknown>)[timestampKey] = new Date();
             }
         }
 
         let result;
 
         if (data.items && data.items.length > 0) {
-            const itemsWithTotals = data.items.map((item: OfferItemInput, index: number) =>
-                buildItemWithTotals(item, index),
-            );
-
+            const itemsWithTotals = buildItemsWithTotals(data.items);
             const offerTotals = calculateOfferTotals(itemsWithTotals);
 
             result = await offersRepository.updateWithItems(
@@ -241,8 +219,6 @@ export class OffersService {
         const offer = await offersRepository.findByIdPublicFields(offerId, userId);
         if (!offer) throw new NotFoundError('Oferta');
 
-        const frontendUrl = (process.env.FRONTEND_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-
         if (offer.publicToken && offer.isInteractive) {
             return {
                 publicToken: offer.publicToken,
@@ -251,7 +227,7 @@ export class OffersService {
             };
         }
 
-        const publicToken = crypto.randomBytes(16).toString('base64url');
+        const publicToken = randomBytes(16).toString('base64url');
 
         const updated = await offersRepository.update(offerId, {
             publicToken,
@@ -279,6 +255,32 @@ export class OffersService {
         return true;
     }
 
+    async generatePDF(offerId: string, userId: string): Promise<{ buffer: Buffer; filename: string }> {
+        const offer = await offersRepository.findByIdWithUser(offerId, userId);
+        if (!offer) throw new NotFoundError('Oferta');
+
+        const pdfOffer = {
+            ...offer,
+            user: mapToPDFUser({
+                id: offer.user.id,
+                email: offer.user.email,
+                name: offer.user.name,
+                phone: offer.user.companyInfo?.phone ?? offer.user.phone,
+                companyInfo: offer.user.companyInfo,
+            }),
+            client: mapToPDFClient(offer.client),
+        };
+
+        const buffer = await pdfService.generateOfferPDF(
+            pdfOffer as Parameters<typeof pdfService.generateOfferPDF>[0],
+        );
+
+        return {
+            buffer,
+            filename: `Oferta_${offer.number.replace(/\//g, '-')}.pdf`,
+        };
+    }
+
     async sendOfferToClient(offerId: string, userId: string): Promise<{ sent: boolean; email: string }> {
         const offer = await offersRepository.findByIdForEmail(offerId, userId);
         if (!offer) throw new NotFoundError('Oferta');
@@ -292,7 +294,6 @@ export class OffersService {
             throw new ValidationError('Skonfiguruj skrzynkę pocztową w ustawieniach');
         }
 
-        const frontendUrl = (process.env.FRONTEND_URL ?? 'http://localhost:3000').replace(/\/$/, '');
         let publicUrl: string;
 
         if (offer.publicToken && offer.isInteractive) {
@@ -319,7 +320,10 @@ export class OffersService {
         );
 
         if (!sent) {
-            throw new ExternalServiceError('SMTP', 'Nie udało się wysłać emaila. Sprawdź konfigurację SMTP');
+            throw new ExternalServiceError(
+                'SMTP',
+                'Nie udało się wysłać emaila. Sprawdź konfigurację SMTP',
+            );
         }
 
         return { sent: true, email: offer.client.email };
@@ -329,8 +333,6 @@ export class OffersService {
         const offer = await offersRepository.findForAnalytics(offerId, userId);
         if (!offer) throw new NotFoundError('Oferta');
 
-        const frontendUrl = (process.env.FRONTEND_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-
         const uniqueIps = new Set(
             offer.views.filter((v) => v.ipAddress).map((v) => v.ipAddress),
         );
@@ -338,7 +340,9 @@ export class OffersService {
         return {
             ...offer,
             uniqueVisitors: uniqueIps.size,
-            publicUrl: offer.publicToken ? `${frontendUrl}/offer/view/${offer.publicToken}` : null,
+            publicUrl: offer.publicToken
+                ? `${frontendUrl}/offer/view/${offer.publicToken}`
+                : null,
         };
     }
 

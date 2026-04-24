@@ -1,5 +1,4 @@
 // src/routes/index.ts
-
 import { Router } from 'express';
 import authRoutes from './auth.routes';
 import publicOfferRoutes from './publicOffer.routes';
@@ -15,7 +14,6 @@ import notificationsRoutes from './notifications.routes';
 import ksefBridgeRoutes from './ksef-bridge.routes';
 import emailComposerRoutes from './email-composer.routes';
 import offerTemplatesRoutes from './offer-templates.routes';
-import { followUpReminderService } from '../services/followupReminder.service';
 
 const router = Router();
 
@@ -34,19 +32,5 @@ router.use('/notifications', notificationsRoutes);
 router.use('/ksef', ksefBridgeRoutes);
 router.use('/emails', emailComposerRoutes);
 router.use('/offer-templates', offerTemplatesRoutes);
-
-router.get('/health', (req, res) => {
-    followUpReminderService.tryPeriodicCheck().catch((err: unknown) => {
-        console.error('❌ Pseudo-cron follow-up check failed:', err);
-    });
-
-    res.json({
-        success: true,
-        data: {
-            status: 'healthy',
-            timestamp: new Date().toISOString(),
-        },
-    });
-});
 
 export default router;

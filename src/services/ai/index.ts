@@ -1,8 +1,10 @@
-// smartquote_backend/src/services/ai/index.ts
+// src/services/ai/index.ts
 import { GoogleGenAI } from '@google/genai';
 import {
     AIMessage,
     AIResponse,
+    AISuggestion,
+    AIStats,
     GeneratedOffer,
     ClientAnalysis,
     EmailGenerationContext,
@@ -14,11 +16,12 @@ import { getPriceInsight, getObserverInsight, getClosingStrategy } from './analy
 import { generatePostMortem, getLatestInsights, getInsightsList } from './feedback';
 
 class AIService {
-    private ai: GoogleGenAI | null;
-    private conversationHistories: Map<string, Array<{ role: string; content: string }>> = new Map();
+    private readonly ai: GoogleGenAI | null;
+    private readonly conversationHistories: Map<string, Array<{ role: string; content: string }>>;
 
     constructor() {
         this.ai = initAI();
+        this.conversationHistories = new Map();
     }
 
     getUserContext(userId: string) {
@@ -70,13 +73,59 @@ class AIService {
             dateFrom?: string;
             dateTo?: string;
             search?: string;
-        }
+        },
     ) {
         return getInsightsList(userId, params);
     }
 
     clearConversationHistory(userId: string): void {
         this.conversationHistories.delete(userId);
+    }
+
+    async getSuggestions(userId: string): Promise<{ suggestions: AISuggestion[]; stats: AIStats | undefined }> {
+        const context = await getUserContext(userId);
+        const suggestions: AISuggestion[] = [];
+
+        if (context.stats?.pendingFollowUps && context.stats.pendingFollowUps > 0) {
+            suggestions.push({
+                type: 'warning',
+                title: 'Zaległe follow-upy',
+                message: `Masz ${context.stats.pendingFollowUps} zaległych follow-upów do wykonania`,
+                action: { type: 'navigate', path: '/dashboard/followups?status=overdue' },
+            });
+        }
+
+        const expiringOffers = context.offers?.filter((o) => {
+            if (o.status !== 'SENT' || !o.validUntil) return false;
+            const daysLeft = Math.ceil(
+                (new Date(o.validUntil).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+            );
+            return daysLeft > 0 && daysLeft <= 7;
+        });
+
+        if (expiringOffers && expiringOffers.length > 0) {
+            suggestions.push({
+                type: 'info',
+                title: 'Oferty wygasające wkrótce',
+                message: `${expiringOffers.length} ofert wygasa w ciągu 7 dni`,
+                action: { type: 'navigate', path: '/dashboard/offers?expiring=true' },
+            });
+        }
+
+        const inactiveClients = context.clients?.filter((c) => !c.isActive);
+        if (inactiveClients && inactiveClients.length > 5) {
+            suggestions.push({
+                type: 'tip',
+                title: 'Reaktywacja klientów',
+                message: `Masz ${inactiveClients.length} nieaktywnych klientów. Rozważ kampanię reaktywacyjną.`,
+                action: {
+                    type: 'ai_prompt',
+                    prompt: 'Pomóż mi reaktywować nieaktywnych klientów',
+                },
+            });
+        }
+
+        return { suggestions, stats: context.stats };
     }
 }
 
