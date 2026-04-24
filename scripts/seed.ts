@@ -20,7 +20,6 @@ async function seed() {
             email: 'test@smartquote.pl',
             password,
             name: 'Jan Kowalski',
-            company: 'SmartQuote Sp. z o.o.',
         },
     });
 
