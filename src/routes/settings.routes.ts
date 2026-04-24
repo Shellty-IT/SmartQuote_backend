@@ -1,5 +1,4 @@
 // smartquote_backend/src/routes/settings.routes.ts
-
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validate';
@@ -32,5 +31,6 @@ router.get('/smtp', settingsController.getSmtpConfig);
 router.put('/smtp', validate(v.updateSmtpConfigSchema), settingsController.updateSmtpConfig);
 router.delete('/smtp', settingsController.deleteSmtpConfig);
 router.post('/smtp/test', validate(v.testSmtpConnectionSchema), settingsController.testSmtpConnection);
+router.post('/smtp/test-saved', settingsController.testSavedSmtpConnection);
 
 export default router;

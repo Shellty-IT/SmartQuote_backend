@@ -22,32 +22,42 @@ export class EmailSender {
             port: config.port,
             secure: config.port === 465,
             auth: { user: config.user, pass: config.pass },
+            connectionTimeout: 10000,
+            greetingTimeout: 10000,
+            socketTimeout: 10000,
         });
     }
 
     async testConnection(config: SmtpConfig): Promise<{ success: boolean; error?: string }> {
+        const transporter = this.createTransporter(config);
         try {
-            const transporter = this.createTransporter(config);
-            await transporter.verify();
+            await Promise.race([
+                transporter.verify(),
+                new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error('Przekroczono czas połączenia (10s)')), 10000)
+                ),
+            ]);
             return { success: true };
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : 'Nieznany błąd połączenia';
             return { success: false, error: message };
+        } finally {
+            transporter.close();
         }
     }
 
     private async send(options: EmailOptions, smtpConfig: SmtpConfig): Promise<boolean> {
+        const transporter = this.createTransporter(smtpConfig);
         try {
-            const transporter = this.createTransporter(smtpConfig);
             await transporter.sendMail({
                 from: smtpConfig.from || smtpConfig.user,
                 ...options,
             });
-            console.log(`Email sent: ${options.subject} to ${options.to}`);
             return true;
         } catch (error: unknown) {
-            console.error('Email failed:', error);
             return false;
+        } finally {
+            transporter.close();
         }
     }
 
