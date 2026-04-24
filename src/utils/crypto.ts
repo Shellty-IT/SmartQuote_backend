@@ -6,7 +6,7 @@ const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
 
 function getEncryptionKey(): Buffer {
-    const envKey = process.env.SMTP_ENCRYPTION_KEY || '';
+    const envKey = process.env.ENCRYPTION_KEY || process.env.SMTP_ENCRYPTION_KEY || '';
     if (envKey.length >= 32) {
         return Buffer.from(envKey.slice(0, 32), 'utf-8');
     }
