@@ -118,6 +118,25 @@ app.get('/health', async (_req: Request, res: Response) => {
     }
 });
 
+app.get('/api/health', async (_req: Request, res: Response) => {
+    try {
+        await prisma.$queryRaw`SELECT 1`;
+        res.status(200).json({
+            status: 'ok',
+            timestamp: new Date().toISOString(),
+            uptime: process.uptime(),
+            services: { database: 'ok' },
+        });
+    } catch {
+        res.status(503).json({
+            status: 'degraded',
+            timestamp: new Date().toISOString(),
+            uptime: process.uptime(),
+            services: { database: 'error' },
+        });
+    }
+});
+
 app.use('/api', routes);
 
 app.use((req: Request, res: Response) => {
@@ -125,7 +144,7 @@ app.use((req: Request, res: Response) => {
         success: false,
         error: {
             code: 'NOT_FOUND',
-            message: `Endpoint ${req.method} ${req.path} nie istnieje`,
+            message: `Endpoint ${req.method} ${req.originalUrl} nie istnieje`,
         },
     });
 });

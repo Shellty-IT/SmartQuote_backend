@@ -1,5 +1,6 @@
 // src/routes/index.ts
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
+import prisma from '../lib/prisma';
 import authRoutes from './auth.routes';
 import publicOfferRoutes from './publicOffer.routes';
 import publicContractRoutes from './publicContract.routes';
@@ -16,6 +17,25 @@ import emailComposerRoutes from './email-composer.routes';
 import offerTemplatesRoutes from './offer-templates.routes';
 
 const router = Router();
+
+router.get('/health', async (_req: Request, res: Response) => {
+    try {
+        await prisma.$queryRaw`SELECT 1`;
+        res.status(200).json({
+            status: 'ok',
+            timestamp: new Date().toISOString(),
+            uptime: process.uptime(),
+            services: { database: 'ok' },
+        });
+    } catch {
+        res.status(503).json({
+            status: 'degraded',
+            timestamp: new Date().toISOString(),
+            uptime: process.uptime(),
+            services: { database: 'error' },
+        });
+    }
+});
 
 router.use('/auth', authRoutes);
 router.use('/public/offers', publicOfferRoutes);
