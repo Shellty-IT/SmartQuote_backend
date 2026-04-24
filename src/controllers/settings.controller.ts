@@ -1,5 +1,4 @@
-// smartquote_backend/src/controllers/settings.controller.ts
-
+// src/controllers/settings.controller.ts
 import { Request, Response, NextFunction } from 'express';
 import * as settingsService from '../services/settings.service';
 import { successResponse, errorResponse } from '../utils/apiResponse';
@@ -158,6 +157,20 @@ export async function deleteSmtpConfig(req: Request, res: Response, next: NextFu
 export async function testSmtpConnection(req: Request, res: Response, next: NextFunction) {
     try {
         const result = await settingsService.testSmtpConnection(req.body);
+        if (result.success) {
+            successResponse(res, { connected: true, message: 'Połączenie SMTP udane' });
+        } else {
+            errorResponse(res, 'SMTP_TEST_FAILED', result.error || 'Nie udało się połączyć', 400);
+        }
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function testSavedSmtpConnection(req: Request, res: Response, next: NextFunction) {
+    try {
+        const userId = req.user!.id;
+        const result = await settingsService.testSavedSmtpConnection(userId);
         if (result.success) {
             successResponse(res, { connected: true, message: 'Połączenie SMTP udane' });
         } else {

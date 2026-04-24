@@ -7,6 +7,7 @@ import { emailComposerRepository } from '../repositories/email-composer.reposito
 import { offersRepository } from '../repositories/offers.repository';
 import { contractsRepository } from '../repositories/contracts.repository';
 import { NotFoundError, ValidationError } from '../errors/domain.errors';
+import { createModuleLogger } from '../lib/logger';
 import type {
     SendEmailInput,
     UpdateDraftInput,
@@ -16,6 +17,8 @@ import type {
     GetEmailLogsParams,
     EmailLogStatus,
 } from '../types';
+
+const logger = createModuleLogger('email-composer');
 
 interface AttachmentBuffer {
     filename: string;
@@ -49,6 +52,9 @@ function createTransporter(config: NonNullable<SmtpConfig>) {
         port: config.port,
         secure: config.port === 465,
         auth: { user: config.user, pass: config.pass },
+        connectionTimeout: 15000,
+        greetingTimeout: 15000,
+        socketTimeout: 30000,
     });
 }
 
@@ -74,6 +80,21 @@ function buildHtmlBody(body: string): string {
 </td></tr>
 </table>
 </body></html>`;
+}
+
+function htmlToPlainText(html: string): string {
+    return html
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<\/h[1-6]>/gi, '\n')
+        .replace(/<\/li>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
 }
 
 function appendLinksToBody(body: string, linkLines: string[]): string {
@@ -196,7 +217,7 @@ class EmailComposerService {
         this.frontendUrl = (process.env.FRONTEND_URL ?? 'http://localhost:3000').replace(/\/$/, '');
     }
 
-    async sendEmail(userId: string, input: SendEmailInput): Promise<{ id: string; status: EmailLogStatus }> {
+    async sendEmail(userId: string, input: SendEmailInput): Promise<{ id: string; status: EmailLogStatus; errorMessage?: string }> {
         if (input.saveAsDraft) {
             const log = await emailComposerRepository.createLog({
                 userId,
@@ -232,16 +253,30 @@ class EmailComposerService {
         try {
             const transporter = createTransporter(smtpConfig);
             await transporter.sendMail({
-                from: smtpConfig.from || smtpConfig.user,
+                from: smtpConfig.from,
                 to: input.toName ? `"${input.toName}" <${input.to}>` : input.to,
                 subject: input.subject,
                 html: htmlBody,
-                text: finalBody,
+                text: htmlToPlainText(finalBody),
                 attachments: nodemailerAttachments,
             });
+            logger.info({ userId, to: input.to, subject: input.subject }, 'Email sent successfully');
         } catch (err: unknown) {
             status = 'FAILED';
             errorMessage = err instanceof Error ? err.message : 'Nieznany błąd SMTP';
+            logger.error(
+                {
+                    err,
+                    userId,
+                    to: input.to,
+                    smtpHost: smtpConfig.host,
+                    smtpPort: smtpConfig.port,
+                    smtpUser: smtpConfig.user,
+                    smtpFrom: smtpConfig.from,
+                    errorMessage,
+                },
+                'SMTP sendMail failed',
+            );
         }
 
         const log = await emailComposerRepository.createLog({
@@ -260,10 +295,10 @@ class EmailComposerService {
             templateName: input.templateName,
         });
 
-        return { id: log.id, status };
+        return { id: log.id, status, errorMessage };
     }
 
-    async sendDraft(userId: string, draftId: string): Promise<{ id: string; status: EmailLogStatus }> {
+    async sendDraft(userId: string, draftId: string): Promise<{ id: string; status: EmailLogStatus; errorMessage?: string }> {
         const draft = await emailComposerRepository.findDraftById(draftId, userId);
         if (!draft) throw new NotFoundError('Szkic');
 
@@ -284,16 +319,31 @@ class EmailComposerService {
         try {
             const transporter = createTransporter(smtpConfig);
             await transporter.sendMail({
-                from: smtpConfig.from || smtpConfig.user,
+                from: smtpConfig.from,
                 to: draft.toName ? `"${draft.toName}" <${draft.to}>` : draft.to,
                 subject: draft.subject,
                 html: htmlBody,
-                text: finalBody,
+                text: htmlToPlainText(finalBody),
                 attachments: nodemailerAttachments,
             });
+            logger.info({ userId, draftId, to: draft.to }, 'Draft sent successfully');
         } catch (err: unknown) {
             newStatus = 'FAILED';
             errorMessage = err instanceof Error ? err.message : 'Nieznany błąd SMTP';
+            logger.error(
+                {
+                    err,
+                    userId,
+                    draftId,
+                    to: draft.to,
+                    smtpHost: smtpConfig.host,
+                    smtpPort: smtpConfig.port,
+                    smtpUser: smtpConfig.user,
+                    smtpFrom: smtpConfig.from,
+                    errorMessage,
+                },
+                'SMTP sendMail (draft) failed',
+            );
         }
 
         const updated = await emailComposerRepository.updateLog(draftId, {
@@ -302,7 +352,7 @@ class EmailComposerService {
             sentAt: newStatus === 'SENT' ? new Date() : undefined,
         });
 
-        return { id: updated.id, status: newStatus };
+        return { id: updated.id, status: newStatus, errorMessage };
     }
 
     async updateDraft(
