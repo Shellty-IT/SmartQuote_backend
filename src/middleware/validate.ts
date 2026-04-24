@@ -7,12 +7,28 @@ export function validate(schema: z.ZodType<unknown, z.ZodTypeDef, unknown>) {
         try {
             const method = req.method.toUpperCase();
 
-            if (method === 'GET' || method === 'DELETE') {
-                await schema.parseAsync(req.query);
+            const isLegacySchema = 'shape' in schema &&
+                typeof schema.shape === 'object' &&
+                schema.shape !== null &&
+                'body' in schema.shape;
+
+            let dataToValidate: unknown;
+
+            if (isLegacySchema) {
+                dataToValidate = {
+                    body: req.body,
+                    query: req.query,
+                    params: req.params,
+                };
             } else {
-                await schema.parseAsync(req.body);
+                if (method === 'GET' || method === 'DELETE') {
+                    dataToValidate = req.query;
+                } else {
+                    dataToValidate = req.body;
+                }
             }
 
+            await schema.parseAsync(dataToValidate);
             next();
         } catch (err) {
             next(err);
