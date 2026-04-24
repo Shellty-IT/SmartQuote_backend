@@ -1,13 +1,8 @@
 // src/controllers/offers.controller.ts
-
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../types';
 import { offersService } from '../services/offers.service';
-import { offersRepository } from '../repositories/offers.repository';
-import { pdfService } from '../services/pdf';
-import { mapToPDFUser, mapToPDFClient } from '../services/pdf/data-mapper';
-import { successResponse, errorResponse, paginatedResponse } from '../utils/apiResponse';
-import { NotFoundError } from '../errors/domain.errors';
+import { successResponse, paginatedResponse } from '../utils/apiResponse';
 
 export class OffersController {
     async create(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -78,32 +73,16 @@ export class OffersController {
 
     async generatePDF(req: AuthenticatedRequest, res: Response, next: NextFunction) {
         try {
-            const { id } = req.params;
-            const userId = req.user!.id;
-
-            const offer = await offersRepository.findByIdWithUser(id, userId);
-            if (!offer) throw new NotFoundError('Oferta');
-
-            const pdfOffer = {
-                ...offer,
-                user: mapToPDFUser({
-                    id: offer.user.id,
-                    email: offer.user.email,
-                    name: offer.user.name,
-                    phone: offer.user.companyInfo?.phone ?? offer.user.phone,
-                    companyInfo: offer.user.companyInfo,
-                }),
-                client: mapToPDFClient(offer.client),
-            };
-
-            const pdfBuffer = await pdfService.generateOfferPDF(pdfOffer as Parameters<typeof pdfService.generateOfferPDF>[0]);
-            const filename = `Oferta_${offer.number.replace(/\//g, '-')}.pdf`;
+            const { buffer, filename } = await offersService.generatePDF(
+                req.params.id,
+                req.user!.id,
+            );
 
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-            res.setHeader('Content-Length', pdfBuffer.length);
+            res.setHeader('Content-Length', buffer.length);
 
-            return res.send(pdfBuffer);
+            return res.send(buffer);
         } catch (err) {
             next(err);
         }
@@ -148,7 +127,11 @@ export class OffersController {
     async addComment(req: AuthenticatedRequest, res: Response, next: NextFunction) {
         try {
             const { content } = req.body as { content: string };
-            const comment = await offersService.addSellerComment(req.params.id, req.user!.id, content);
+            const comment = await offersService.addSellerComment(
+                req.params.id,
+                req.user!.id,
+                content,
+            );
             return successResponse(res, comment, 201);
         } catch (err) {
             next(err);

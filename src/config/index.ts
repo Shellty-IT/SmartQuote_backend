@@ -1,5 +1,4 @@
 // src/config/index.ts
-
 import dotenv from 'dotenv';
 import { z } from 'zod';
 
@@ -8,8 +7,14 @@ dotenv.config();
 const configSchema = z.object({
     PORT: z.string().default('8080').transform((v) => parseInt(v, 10)),
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-    CLIENT_URL: z.string().url('CLIENT_URL musi być poprawnym URL').default('http://localhost:3000'),
-    FRONTEND_URL: z.string().url('FRONTEND_URL musi być poprawnym URL').default('http://localhost:3000'),
+    CLIENT_URL: z
+        .string()
+        .url('CLIENT_URL musi być poprawnym URL')
+        .default('http://localhost:3000'),
+    FRONTEND_URL: z
+        .string()
+        .url('FRONTEND_URL musi być poprawnym URL')
+        .default('http://localhost:3000'),
     JWT_SECRET: z
         .string()
         .min(32, 'JWT_SECRET musi mieć minimum 32 znaki')
@@ -18,7 +23,10 @@ const configSchema = z.object({
     GEMINI_API_KEY: z.string().default(''),
     GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
     SMTP_HOST: z.string().optional(),
-    SMTP_PORT: z.string().optional().transform((v) => (v ? parseInt(v, 10) : undefined)),
+    SMTP_PORT: z
+        .string()
+        .optional()
+        .transform((v) => (v ? parseInt(v, 10) : undefined)),
     SMTP_USER: z.string().optional(),
     SMTP_PASS: z.string().optional(),
     SMTP_FROM: z.string().optional(),
@@ -36,7 +44,7 @@ function validateConfig() {
             .map((issue) => `  • ${issue.path.join('.')}: ${issue.message}`)
             .join('\n');
 
-        console.error('❌ Nieprawidłowa konfiguracja środowiskowa:\n' + formatted);
+        process.stderr.write(`❌ Nieprawidłowa konfiguracja środowiskowa:\n${formatted}\n`);
         process.exit(1);
     }
 

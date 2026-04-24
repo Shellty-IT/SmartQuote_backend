@@ -1,5 +1,4 @@
 // src/services/email-composer.service.ts
-
 import nodemailer from 'nodemailer';
 import { getDecryptedSmtpConfig } from './settings.service';
 import { pdfService } from './pdf/index';
@@ -7,7 +6,7 @@ import { mapToPDFUser, mapToPDFClient } from './pdf/data-mapper';
 import { emailComposerRepository } from '../repositories/email-composer.repository';
 import { offersRepository } from '../repositories/offers.repository';
 import { contractsRepository } from '../repositories/contracts.repository';
-import { NotFoundError, ValidationError, ExternalServiceError } from '../errors/domain.errors';
+import { NotFoundError, ValidationError } from '../errors/domain.errors';
 import type {
     SendEmailInput,
     UpdateDraftInput,
@@ -42,36 +41,19 @@ interface UserForPDF {
     } | null;
 }
 
-class EmailComposerService {
-    private readonly frontendUrl: string;
+type SmtpConfig = Awaited<ReturnType<typeof getDecryptedSmtpConfig>> & {};
 
-    constructor() {
-        this.frontendUrl = (process.env.FRONTEND_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-    }
+function createTransporter(config: NonNullable<SmtpConfig>) {
+    return nodemailer.createTransport({
+        host: config.host,
+        port: config.port,
+        secure: config.port === 465,
+        auth: { user: config.user, pass: config.pass },
+    });
+}
 
-    private async getSmtpOrThrow(userId: string) {
-        const config = await getDecryptedSmtpConfig(userId);
-        if (!config) throw new ValidationError('Skonfiguruj skrzynkę pocztową w ustawieniach SMTP');
-        return config;
-    }
-
-    private createTransporter(config: {
-        host: string;
-        port: number;
-        user: string;
-        pass: string;
-        from: string;
-    }) {
-        return nodemailer.createTransport({
-            host: config.host,
-            port: config.port,
-            secure: config.port === 465,
-            auth: { user: config.user, pass: config.pass },
-        });
-    }
-
-    private buildHtmlBody(body: string): string {
-        return `<!DOCTYPE html>
+function buildHtmlBody(body: string): string {
+    return `<!DOCTYPE html>
 <html lang="pl">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
 <body style="margin:0;padding:0;background-color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
@@ -92,104 +74,126 @@ class EmailComposerService {
 </td></tr>
 </table>
 </body></html>`;
-    }
+}
 
-    private async generateOfferPDFBuffer(offerId: string, userId: string): Promise<AttachmentBuffer> {
-        const offer = await offersRepository.findByIdForPDFAttachment(offerId, userId);
-        if (!offer) throw new NotFoundError('Oferta');
+function appendLinksToBody(body: string, linkLines: string[]): string {
+    if (linkLines.length === 0) return body;
+    return `${body}\n\n---\n${linkLines.join('\n')}`;
+}
 
-        const userForPDF: UserForPDF = {
-            id: offer.user.id,
-            email: offer.user.email,
-            name: offer.user.name,
-            phone: offer.user.phone,
-            companyInfo: offer.user.companyInfo,
-        };
+async function getSmtpOrThrow(userId: string): Promise<NonNullable<SmtpConfig>> {
+    const config = await getDecryptedSmtpConfig(userId);
+    if (!config) throw new ValidationError('Skonfiguruj skrzynkę pocztową w ustawieniach SMTP');
+    return config;
+}
 
-        const pdfBuffer = await pdfService.generateOfferPDF({
-            ...offer,
-            user: mapToPDFUser(userForPDF),
-            client: mapToPDFClient(offer.client),
-            acceptanceLog: null,
-        } as Parameters<typeof pdfService.generateOfferPDF>[0]);
+async function generateOfferPDFBuffer(
+    offerId: string,
+    userId: string,
+    frontendUrl: string,
+): Promise<AttachmentBuffer> {
+    void frontendUrl;
+    const offer = await offersRepository.findByIdForPDFAttachment(offerId, userId);
+    if (!offer) throw new NotFoundError('Oferta');
 
-        return {
-            filename: `Oferta_${offer.number.replace(/\//g, '-')}.pdf`,
-            content: pdfBuffer,
-            contentType: 'application/pdf',
-        };
-    }
+    const userForPDF: UserForPDF = {
+        id: offer.user.id,
+        email: offer.user.email,
+        name: offer.user.name,
+        phone: offer.user.phone,
+        companyInfo: offer.user.companyInfo,
+    };
 
-    private async generateContractPDFBuffer(contractId: string, userId: string): Promise<AttachmentBuffer> {
-        const contract = await contractsRepository.findByIdForPDFAttachment(contractId, userId);
-        if (!contract) throw new NotFoundError('Kontrakt');
+    const pdfBuffer = await pdfService.generateOfferPDF({
+        ...offer,
+        user: mapToPDFUser(userForPDF),
+        client: mapToPDFClient(offer.client),
+        acceptanceLog: null,
+    } as Parameters<typeof pdfService.generateOfferPDF>[0]);
 
-        const userForPDF: UserForPDF = {
-            id: contract.user.id,
-            email: contract.user.email,
-            name: contract.user.name,
-            phone: contract.user.phone,
-            companyInfo: contract.user.companyInfo,
-        };
+    return {
+        filename: `Oferta_${offer.number.replace(/\//g, '-')}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf',
+    };
+}
 
-        const pdfBuffer = await pdfService.generateContractPDF({
-            ...contract,
-            user: mapToPDFUser(userForPDF),
-            client: mapToPDFClient(contract.client),
-            signatureLog: undefined,
-        } as Parameters<typeof pdfService.generateContractPDF>[0]);
+async function generateContractPDFBuffer(
+    contractId: string,
+    userId: string,
+): Promise<AttachmentBuffer> {
+    const contract = await contractsRepository.findByIdForPDFAttachment(contractId, userId);
+    if (!contract) throw new NotFoundError('Kontrakt');
 
-        return {
-            filename: `Umowa_${contract.number.replace(/\//g, '-')}.pdf`,
-            content: pdfBuffer,
-            contentType: 'application/pdf',
-        };
-    }
+    const userForPDF: UserForPDF = {
+        id: contract.user.id,
+        email: contract.user.email,
+        name: contract.user.name,
+        phone: contract.user.phone,
+        companyInfo: contract.user.companyInfo,
+    };
 
-    private async resolveAttachments(
-        attachments: EmailAttachment[],
-        userId: string,
-    ): Promise<{
-        nodemailerAttachments: nodemailer.SendMailOptions['attachments'];
-        linkLines: string[];
-    }> {
-        const nodemailerAttachments: nodemailer.SendMailOptions['attachments'] = [];
-        const linkLines: string[] = [];
+    const pdfBuffer = await pdfService.generateContractPDF({
+        ...contract,
+        user: mapToPDFUser(userForPDF),
+        client: mapToPDFClient(contract.client),
+        signatureLog: undefined,
+    } as Parameters<typeof pdfService.generateContractPDF>[0]);
 
-        for (const att of attachments) {
-            if (att.type === 'offer_pdf') {
-                const buf = await this.generateOfferPDFBuffer(att.resourceId, userId);
-                nodemailerAttachments.push({
-                    filename: buf.filename,
-                    content: buf.content,
-                    contentType: buf.contentType,
-                });
-            } else if (att.type === 'contract_pdf') {
-                const buf = await this.generateContractPDFBuffer(att.resourceId, userId);
-                nodemailerAttachments.push({
-                    filename: buf.filename,
-                    content: buf.content,
-                    contentType: buf.contentType,
-                });
-            } else if (att.type === 'offer_link') {
-                const offer = await emailComposerRepository.findOfferPublicToken(att.resourceId, userId);
-                if (offer?.publicToken) {
-                    linkLines.push(`Oferta ${offer.number}: ${this.frontendUrl}/offer/view/${offer.publicToken}`);
-                }
-            } else if (att.type === 'contract_link') {
-                const contract = await emailComposerRepository.findContractPublicToken(att.resourceId, userId);
-                if (contract?.publicToken) {
-                    linkLines.push(`Umowa ${contract.number}: ${this.frontendUrl}/contract/view/${contract.publicToken}`);
-                }
+    return {
+        filename: `Umowa_${contract.number.replace(/\//g, '-')}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf',
+    };
+}
+
+async function resolveAttachments(
+    attachments: EmailAttachment[],
+    userId: string,
+    frontendUrl: string,
+): Promise<{
+    nodemailerAttachments: nodemailer.SendMailOptions['attachments'];
+    linkLines: string[];
+}> {
+    const nodemailerAttachments: nodemailer.SendMailOptions['attachments'] = [];
+    const linkLines: string[] = [];
+
+    for (const att of attachments) {
+        if (att.type === 'offer_pdf') {
+            const buf = await generateOfferPDFBuffer(att.resourceId, userId, frontendUrl);
+            nodemailerAttachments.push({
+                filename: buf.filename,
+                content: buf.content,
+                contentType: buf.contentType,
+            });
+        } else if (att.type === 'contract_pdf') {
+            const buf = await generateContractPDFBuffer(att.resourceId, userId);
+            nodemailerAttachments.push({
+                filename: buf.filename,
+                content: buf.content,
+                contentType: buf.contentType,
+            });
+        } else if (att.type === 'offer_link') {
+            const offer = await emailComposerRepository.findOfferPublicToken(att.resourceId, userId);
+            if (offer?.publicToken) {
+                linkLines.push(`Oferta ${offer.number}: ${frontendUrl}/offer/view/${offer.publicToken}`);
+            }
+        } else if (att.type === 'contract_link') {
+            const contract = await emailComposerRepository.findContractPublicToken(att.resourceId, userId);
+            if (contract?.publicToken) {
+                linkLines.push(`Umowa ${contract.number}: ${frontendUrl}/contract/view/${contract.publicToken}`);
             }
         }
-
-        return { nodemailerAttachments, linkLines };
     }
 
-    private appendLinksToBody(body: string, linkLines: string[]): string {
-        if (linkLines.length === 0) return body;
-        return `${body}\n\n---\n${linkLines.join('\n')}`;
+    return { nodemailerAttachments, linkLines };
+}
+
+class EmailComposerService {
+    private readonly frontendUrl: string;
+
+    constructor() {
+        this.frontendUrl = (process.env.FRONTEND_URL ?? 'http://localhost:3000').replace(/\/$/, '');
     }
 
     async sendEmail(userId: string, input: SendEmailInput): Promise<{ id: string; status: EmailLogStatus }> {
@@ -211,18 +215,22 @@ class EmailComposerService {
             return { id: log.id, status: 'DRAFT' };
         }
 
-        const smtpConfig = await this.getSmtpOrThrow(userId);
+        const smtpConfig = await getSmtpOrThrow(userId);
         const attachments = input.attachments ?? [];
 
-        const { nodemailerAttachments, linkLines } = await this.resolveAttachments(attachments, userId);
-        const finalBody = this.appendLinksToBody(input.body, linkLines);
-        const htmlBody = this.buildHtmlBody(finalBody);
+        const { nodemailerAttachments, linkLines } = await resolveAttachments(
+            attachments,
+            userId,
+            this.frontendUrl,
+        );
+        const finalBody = appendLinksToBody(input.body, linkLines);
+        const htmlBody = buildHtmlBody(finalBody);
 
         let status: EmailLogStatus = 'SENT';
         let errorMessage: string | undefined;
 
         try {
-            const transporter = this.createTransporter(smtpConfig);
+            const transporter = createTransporter(smtpConfig);
             await transporter.sendMail({
                 from: smtpConfig.from || smtpConfig.user,
                 to: input.toName ? `"${input.toName}" <${input.to}>` : input.to,
@@ -259,18 +267,22 @@ class EmailComposerService {
         const draft = await emailComposerRepository.findDraftById(draftId, userId);
         if (!draft) throw new NotFoundError('Szkic');
 
-        const smtpConfig = await this.getSmtpOrThrow(userId);
+        const smtpConfig = await getSmtpOrThrow(userId);
         const attachments = (draft.attachments as unknown as EmailAttachment[]) ?? [];
 
-        const { nodemailerAttachments, linkLines } = await this.resolveAttachments(attachments, userId);
-        const finalBody = this.appendLinksToBody(draft.body, linkLines);
-        const htmlBody = this.buildHtmlBody(finalBody);
+        const { nodemailerAttachments, linkLines } = await resolveAttachments(
+            attachments,
+            userId,
+            this.frontendUrl,
+        );
+        const finalBody = appendLinksToBody(draft.body, linkLines);
+        const htmlBody = buildHtmlBody(finalBody);
 
         let newStatus: EmailLogStatus = 'SENT';
         let errorMessage: string | undefined;
 
         try {
-            const transporter = this.createTransporter(smtpConfig);
+            const transporter = createTransporter(smtpConfig);
             await transporter.sendMail({
                 from: smtpConfig.from || smtpConfig.user,
                 to: draft.toName ? `"${draft.toName}" <${draft.to}>` : draft.to,
@@ -293,7 +305,11 @@ class EmailComposerService {
         return { id: updated.id, status: newStatus };
     }
 
-    async updateDraft(userId: string, draftId: string, input: UpdateDraftInput): Promise<{ id: string }> {
+    async updateDraft(
+        userId: string,
+        draftId: string,
+        input: UpdateDraftInput,
+    ): Promise<{ id: string }> {
         const draft = await emailComposerRepository.findDraftById(draftId, userId);
         if (!draft) throw new NotFoundError('Szkic');
 
@@ -321,7 +337,6 @@ class EmailComposerService {
 
     async getEmailLogs(params: GetEmailLogsParams) {
         const result = await emailComposerRepository.findLogs(params);
-
         return {
             items: result.items,
             meta: {

@@ -1,14 +1,13 @@
 // src/app.ts
-
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import morgan from 'morgan';
-import rateLimit from 'express-rate-limit';
 import { randomUUID } from 'crypto';
+import rateLimit from 'express-rate-limit';
 import { config, isDev } from './config';
 import routes from './routes';
 import { errorHandler } from './middleware/errorHandler';
+import { logger } from './lib/logger';
 import prisma from './lib/prisma';
 
 const app = express();
@@ -18,8 +17,9 @@ app.set('trust proxy', 1);
 app.use(helmet());
 
 const allowedOrigins = new Set<string>(
-    [config.clientUrl, config.frontendUrl, isDev ? 'http://localhost:3000' : null]
-        .filter((v): v is string => Boolean(v)),
+    [config.clientUrl, config.frontendUrl, isDev ? 'http://localhost:3000' : null].filter(
+        (v): v is string => Boolean(v),
+    ),
 );
 
 app.use(
@@ -77,34 +77,43 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
     next();
 });
 
-morgan.token('id', (req: Request) => (req as Request & { id: string }).id ?? '-');
+app.use((req: Request, res: Response, next: NextFunction) => {
+    const requestId = (req as Request & { id: string }).id;
+    const start = Date.now();
 
-const morganFormat = isDev
-    ? ':id :method :url :status :response-time ms'
-    : ':id :remote-addr :method :url :status :res[content-length] :response-time ms';
+    res.on('finish', () => {
+        const duration = Date.now() - start;
+        logger.info(
+            {
+                requestId,
+                method: req.method,
+                url: req.originalUrl,
+                status: res.statusCode,
+                duration,
+                ip: req.ip,
+            },
+            'Request completed',
+        );
+    });
 
-app.use(morgan(morganFormat));
+    next();
+});
 
 app.get('/health', async (_req: Request, res: Response) => {
     try {
         await prisma.$queryRaw`SELECT 1`;
-
         res.status(200).json({
             status: 'ok',
             timestamp: new Date().toISOString(),
             uptime: process.uptime(),
-            services: {
-                database: 'ok',
-            },
+            services: { database: 'ok' },
         });
     } catch {
         res.status(503).json({
             status: 'degraded',
             timestamp: new Date().toISOString(),
             uptime: process.uptime(),
-            services: {
-                database: 'error',
-            },
+            services: { database: 'error' },
         });
     }
 });
