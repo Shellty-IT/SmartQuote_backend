@@ -9,12 +9,12 @@ import { createOfferTemplateSchema, updateOfferTemplateSchema, getOfferTemplates
 export class OfferTemplatesController {
     async create(req: AuthenticatedRequest, res: Response) {
         try {
-            const parsed = createOfferTemplateSchema.safeParse(req.body);
+            const parsed = createOfferTemplateSchema.safeParse({ body: req.body, query: req.query, params: req.params });
             if (!parsed.success) {
                 return errorResponse(res, 'VALIDATION_ERROR', parsed.error.errors[0].message, 400);
             }
 
-            const template = await offerTemplatesService.create(req.user!.id, parsed.data);
+            const template = await offerTemplatesService.create(req.user!.id, parsed.data.body);
             return successResponse(res, template, 201);
         } catch (error: unknown) {
             return errorResponse(res, 'CREATE_FAILED', 'Nie udało się utworzyć szablonu', 500);
@@ -35,14 +35,14 @@ export class OfferTemplatesController {
 
     async findAll(req: AuthenticatedRequest, res: Response) {
         try {
-            const parsed = getOfferTemplatesSchema.safeParse(req.query);
+            const parsed = getOfferTemplatesSchema.safeParse({ body: req.body, query: req.query, params: req.params });
             if (!parsed.success) {
                 return errorResponse(res, 'VALIDATION_ERROR', parsed.error.errors[0].message, 400);
             }
 
             const { templates, total, page, limit } = await offerTemplatesService.findAll(
                 req.user!.id,
-                parsed.data
+                parsed.data.query
             );
             return paginatedResponse(res, templates, total, page, limit);
         } catch (error: unknown) {
@@ -61,12 +61,12 @@ export class OfferTemplatesController {
 
     async update(req: AuthenticatedRequest, res: Response) {
         try {
-            const parsed = updateOfferTemplateSchema.safeParse(req.body);
+            const parsed = updateOfferTemplateSchema.safeParse({ body: req.body, query: req.query, params: req.params });
             if (!parsed.success) {
                 return errorResponse(res, 'VALIDATION_ERROR', parsed.error.errors[0].message, 400);
             }
 
-            const template = await offerTemplatesService.update(req.params.id, req.user!.id, parsed.data);
+            const template = await offerTemplatesService.update(req.params.id, req.user!.id, parsed.data.body);
             if (!template) {
                 return errorResponse(res, 'NOT_FOUND', 'Szablon nie znaleziony', 404);
             }
