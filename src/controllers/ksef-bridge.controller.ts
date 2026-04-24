@@ -22,13 +22,13 @@ export class KsefBridgeController {
 
     async send(req: AuthenticatedRequest, res: Response) {
         try {
-            const parsed = ksefSendSchema.safeParse(req.body);
+            const parsed = ksefSendSchema.safeParse({ body: req.body, query: req.query, params: req.params });
             if (!parsed.success) {
                 const firstError = parsed.error.errors[0];
                 return errorResponse(res, 'VALIDATION_ERROR', firstError.message, 400);
             }
 
-            const { offerId, issueDate, dueDate } = parsed.data;
+            const { offerId, issueDate, dueDate } = parsed.data.body;
             const result = await ksefBridgeService.sendToKsefMaster(offerId, req.user!.id, issueDate, dueDate);
             return successResponse(res, result);
         } catch (error: unknown) {
@@ -86,13 +86,13 @@ export class KsefBridgeController {
                 return errorResponse(res, 'UNAUTHORIZED', 'Invalid API key', 401);
             }
 
-            const parsed = ksefWebhookSchema.safeParse(req.body);
+            const parsed = ksefWebhookSchema.safeParse({ body: req.body, query: req.query, params: req.params });
             if (!parsed.success) {
                 const firstError = parsed.error.errors[0];
                 return errorResponse(res, 'VALIDATION_ERROR', firstError.message, 400);
             }
 
-            const { smartQuoteId, action, externalId } = parsed.data;
+            const { smartQuoteId, action, externalId } = parsed.data.body;
             const result = await ksefBridgeService.handleWebhook(smartQuoteId, action, externalId);
             return successResponse(res, result);
         } catch (error: unknown) {
