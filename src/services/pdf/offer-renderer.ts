@@ -54,8 +54,9 @@ export function renderOfferPDF(offer: PDFOffer): Promise<Buffer> {
         Y = 60;
 
         doc.font('Bold').fontSize(16).fillColor('#1e293b').text('OFERTA HANDLOWA', L, Y);
-        doc.font('Regular').fontSize(10).fillColor(ACCENT).text('Nr: ' + offer.number, L + 175, Y + 2);
-        Y += 28;
+        Y += 6;
+        doc.font('Regular').fontSize(10).fillColor(ACCENT).text('Nr: ' + offer.number, L, Y + 16);
+        Y += 34;
 
         const boxW = 248;
         const boxH = 80;
@@ -97,9 +98,9 @@ export function renderOfferPDF(offer: PDFOffer): Promise<Buffer> {
         doc.rect(L, Y, W, 26).fill('#f1f5f9');
         const infos = [
             ['Data', date(offer.createdAt)],
-            ['Wazna do', date(offer.validUntil)],
+            ['Wa\u017cna do', date(offer.validUntil)],
             ['Status', statusMap[offer.status] || offer.status],
-            ['Platnosc', offer.paymentDays + ' dni']
+            ['P\u0142atno\u015b\u0107', offer.paymentDays + ' dni']
         ];
         const iW = W / 4;
         infos.forEach(([lbl, val], i) => {
@@ -125,7 +126,7 @@ export function renderOfferPDF(offer: PDFOffer): Promise<Buffer> {
             if (Y > 650) { doc.addPage(); Y = 40; }
 
             if (hasVariants) {
-                const label = group.name ? 'Wariant: ' + txt(group.name) : 'Pozycje wspolne';
+                const label = group.name ? 'Wariant: ' + txt(group.name) : 'Pozycje wsp\u00f3lne';
                 doc.rect(L, Y, W, 20).fill(group.name ? '#ecfeff' : '#f1f5f9');
                 doc.font('Bold').fontSize(9)
                     .fillColor(group.name ? '#0891b2' : '#475569')
@@ -166,7 +167,7 @@ export function renderOfferPDF(offer: PDFOffer): Promise<Buffer> {
 
         if (hasVariants) {
             doc.font('Regular').fontSize(7).fillColor('#94a3b8')
-                .text('* Kwota brutto dotyczy pozycji wspolnych + pierwszego wariantu', L, Y);
+                .text('* Kwota brutto dotyczy pozycji wsp\u00f3lnych + pierwszego wariantu', L, Y);
             Y += 15;
         }
 
@@ -179,7 +180,7 @@ export function renderOfferPDF(offer: PDFOffer): Promise<Buffer> {
         }
 
         doc.moveTo(380, Y + 20).lineTo(555, Y + 20).stroke('#cbd5e1');
-        doc.font('Regular').fontSize(7).fillColor('#94a3b8').text('Podpis i pieczen', 380, Y + 24, { width: 175, align: 'center' });
+        doc.font('Regular').fontSize(7).fillColor('#94a3b8').text('Podpis', 380, Y + 24, { width: 175, align: 'center' });
 
         const targetY = 720;
         if (Y < targetY) Y = targetY;
@@ -234,7 +235,7 @@ function renderAuditTrailPage(
     const colW = (W - 15) / 2;
 
     doc.rect(L, Y, colW, 16).fill(ACCENT);
-    doc.font('Bold').fontSize(8).fillColor('#fff').text('AKCEPTUJACY', L + 8, Y + 4);
+    doc.font('Bold').fontSize(8).fillColor('#fff').text('AKCEPTUJ\u0104CY', L + 8, Y + 4);
     doc.rect(L, Y + 16, colW, 50).fill('#f8fafc').stroke('#e2e8f0');
     doc.font('Bold').fontSize(9).fillColor('#1e293b').text(txt(log.clientName || '-'), L + 8, Y + 22);
     doc.font('Regular').fontSize(8).fillColor('#64748b').text(log.clientEmail || '-', L + 8, Y + 34);
@@ -250,7 +251,7 @@ function renderAuditTrailPage(
     Y += 80;
 
     doc.rect(L, Y, W, 16).fill('#0f172a');
-    doc.font('Bold').fontSize(8).fillColor('#fff').text('SZCZEGOLY AKCEPTACJI', L + 8, Y + 4);
+    doc.font('Bold').fontSize(8).fillColor('#fff').text('SZCZEG\u00d3\u0141Y AKCEPTACJI', L + 8, Y + 4);
     Y += 16;
 
     const details: [string, string][] = [
@@ -307,20 +308,20 @@ function renderAuditTrailPage(
 
     doc.font('Regular').fontSize(7).fillColor('#64748b')
         .text(
-            'Hash SHA-256 wygenerowany z zawartosci oferty (pozycje, ceny, wariant, waluta). ' +
-            'Sluzy do weryfikacji integralnosci danych w momencie akceptacji.',
+            'Hash SHA-256 wygenerowany z zawarto\u015bci oferty (pozycje, ceny, wariant, waluta). ' +
+            'S\u0142u\u017cy do weryfikacji integralno\u015bci danych w momencie akceptacji.',
             L, Y + 4, { width: W }
         );
     Y += 28;
 
     doc.rect(L, Y, W, 45).fill(ACCENT_LIGHT).stroke('#a7f3d0');
-    doc.font('Bold').fontSize(8).fillColor('#065f46').text('Oswiadczenie', L + 10, Y + 6);
+    doc.font('Bold').fontSize(8).fillColor('#065f46').text('O\u015bwiadczenie', L + 10, Y + 6);
     doc.font('Regular').fontSize(7).fillColor('#047857')
         .text(
-            'Niniejszy certyfikat potwierdza, ze osoba wskazana powyzej zaakceptowala oferte ' +
+            'Niniejszy certyfikat potwierdza, \u017ce osoba wskazana powy\u017cej zaakceptowa\u0142a ofert\u0119 ' +
             'nr ' + offer.number + ' w dniu ' + dateTime(log.acceptedAt) + '. ' +
-            'Dane zostaly zarejestrowane automatycznie przez system SmartQuote AI i sa niemodyfikowalne. ' +
-            'Hash SHA-256 umozliwia weryfikacje integralnosci tresci oferty w momencie akceptacji.',
+            'Dane zosta\u0142y zarejestrowane automatycznie przez system SmartQuote AI i s\u0105 niemodyfikowalne. ' +
+            'Hash SHA-256 umo\u017cliwia weryfikacj\u0119 integralno\u015bci tre\u015bci oferty w momencie akceptacji.',
             L + 10, Y + 18, { width: W - 20 }
         );
 

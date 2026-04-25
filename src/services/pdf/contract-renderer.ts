@@ -96,8 +96,8 @@ export function renderContractPDF(contract: PDFContract): Promise<Buffer> {
         doc.rect(L, Y, W, 26).fill('#f1f5f9');
         const cinfos = [
             ['Data zawarcia', date(contract.createdAt)],
-            ['Obowiazuje od', date(contract.startDate)],
-            ['Obowiazuje do', date(contract.endDate)],
+            ['\u004Fbowi\u0105zuje od', date(contract.startDate)],
+            ['\u004Fbowi\u0105zuje do', date(contract.endDate)],
             ['Status', contractStatusMap[contract.status] || contract.status]
         ];
         const ciW = W / 4;
@@ -142,14 +142,14 @@ export function renderContractPDF(contract: PDFContract): Promise<Buffer> {
 
         if (contract.paymentTerms) {
             if (Y > 680) { doc.addPage(); Y = 40; }
-            doc.font('Bold').fontSize(9).fillColor('#1e293b').text('Warunki platnosci:', L, Y);
+            doc.font('Bold').fontSize(9).fillColor('#1e293b').text('Warunki p\u0142atno\u015bci:', L, Y);
             Y += 12;
             doc.font('Regular').fontSize(8).fillColor('#64748b').text(txt(contract.paymentTerms), L, Y, { width: W });
             Y += 25;
         }
 
         doc.font('Regular').fontSize(8).fillColor('#64748b')
-            .text('Termin platnosci: ' + contract.paymentDays + ' dni', L, Y);
+            .text('Termin p\u0142atno\u015bci: ' + contract.paymentDays + ' dni', L, Y);
         Y += 20;
 
         doc.moveTo(L, Y + 20).lineTo(L + 175, Y + 20).stroke('#cbd5e1');
@@ -204,7 +204,7 @@ function renderContractSignaturePage(
     const colW = (W - 15) / 2;
 
     doc.rect(L, Y, colW, 16).fill(ACCENT);
-    doc.font('Bold').fontSize(8).fillColor('#fff').text('PODPISUJACY', L + 8, Y + 4);
+    doc.font('Bold').fontSize(8).fillColor('#fff').text('PODPISUJ\u0104CY', L + 8, Y + 4);
     doc.rect(L, Y + 16, colW, 50).fill('#f8fafc').stroke('#e2e8f0');
     doc.font('Bold').fontSize(9).fillColor('#1e293b').text(txt(log.signerName), L + 8, Y + 22);
     doc.font('Regular').fontSize(8).fillColor('#64748b').text(log.signerEmail, L + 8, Y + 34);
@@ -231,12 +231,12 @@ function renderContractSignaturePage(
         doc.image(imgBuffer, imgX, Y + 5, { width: 250, height: 80, fit: [250, 80], align: 'center', valign: 'center' });
     } catch {
         doc.font('Regular').fontSize(9).fillColor('#94a3b8')
-            .text('[Podpis niedostepny]', L + 8, Y + 35, { width: W - 16, align: 'center' });
+            .text('Podpis niedost\u0119pny', L + 8, Y + 35, { width: W - 16, align: 'center' });
     }
     Y += 94;
 
     doc.rect(L, Y, W, 16).fill('#0f172a');
-    doc.font('Bold').fontSize(8).fillColor('#fff').text('SZCZEGOLY PODPISU', L + 8, Y + 4);
+    doc.font('Bold').fontSize(8).fillColor('#fff').text('SZCZEG\u00d3\u0141Y PODPISU', L + 8, Y + 4);
     Y += 16;
 
     const details: [string, string][] = [
@@ -286,20 +286,20 @@ function renderContractSignaturePage(
 
     doc.font('Regular').fontSize(7).fillColor('#64748b')
         .text(
-            'Hash SHA-256 wygenerowany z zawartosci umowy (pozycje, ceny, waluta). ' +
-            'Sluzy do weryfikacji integralnosci danych w momencie podpisu.',
+            'Hash SHA-256 wygenerowany z zawarto\u015bci umowy (pozycje, ceny, waluta). ' +
+            'S\u0142u\u017cy do weryfikacji integralno\u015bci danych w momencie podpisu.',
             L, Y + 4, { width: W }
         );
     Y += 28;
 
     doc.rect(L, Y, W, 45).fill(ACCENT_LIGHT).stroke('#a7f3d0');
-    doc.font('Bold').fontSize(8).fillColor('#065f46').text('Oswiadczenie', L + 10, Y + 6);
+    doc.font('Bold').fontSize(8).fillColor('#065f46').text('O\u015bwiadczenie', L + 10, Y + 6);
     doc.font('Regular').fontSize(7).fillColor('#047857')
         .text(
-            'Niniejszy certyfikat potwierdza, ze osoba wskazana powyzej podpisala umowe ' +
+            'Niniejszy certyfikat potwierdza, \u017ce osoba wskazana powy\u017cej podpisa\u0142a umow\u0119 ' +
             'nr ' + contract.number + ' w dniu ' + dateTime(log.signedAt) + '. ' +
-            'Podpis elektroniczny i dane zostaly zarejestrowane automatycznie przez system SmartQuote AI i sa niemodyfikowalne. ' +
-            'Hash SHA-256 umozliwia weryfikacje integralnosci tresci umowy w momencie podpisu.',
+            'Podpis elektroniczny i dane zosta\u0142y zarejestrowane automatycznie przez system SmartQuote AI i s\u0105 niemodyfikowalne. ' +
+            'Hash SHA-256 umo\u017cliwia weryfikacj\u0119 integralno\u015bci tre\u015bci umowy w momencie podpisu.',
             L + 10, Y + 18, { width: W - 20 }
         );
 
