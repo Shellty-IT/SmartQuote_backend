@@ -1,10 +1,10 @@
-// smartquote_backend/src/lib/cache.ts
+// src/lib/cache.ts
 interface CacheEntry<T> {
     data: T;
     expiresAt: number;
 }
 
-class MemoryCache {
+export class MemoryCache {
     private store: Map<string, CacheEntry<unknown>> = new Map();
     private maxSize: number;
     private cleanupInterval: NodeJS.Timeout | null = null;

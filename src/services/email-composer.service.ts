@@ -8,6 +8,7 @@ import { offersRepository } from '../repositories/offers.repository';
 import { contractsRepository } from '../repositories/contracts.repository';
 import { NotFoundError, ValidationError } from '../errors/domain.errors';
 import { createModuleLogger } from '../lib/logger';
+import { config } from '../config';
 import type {
     SendEmailInput,
     UpdateDraftInput,
@@ -44,9 +45,24 @@ interface UserForPDF {
     } | null;
 }
 
-type SmtpConfig = Awaited<ReturnType<typeof getDecryptedSmtpConfig>> & {};
+type SmtpConfig = Awaited<ReturnType<typeof getDecryptedSmtpConfig>>;
 
-function createTransporter(config: NonNullable<SmtpConfig>) {
+interface SendResult {
+    id: string;
+    status: EmailLogStatus;
+    errorMessage?: string;
+}
+
+interface EmailPayload {
+    from: string;
+    to: string;
+    subject: string;
+    html: string;
+    text: string;
+    attachments: nodemailer.SendMailOptions['attachments'];
+}
+
+function createTransporter(config: NonNullable<SmtpConfig>): nodemailer.Transporter {
     return nodemailer.createTransport({
         host: config.host,
         port: config.port,
@@ -65,8 +81,7 @@ function buildHtmlBody(body: string): string {
 <body style="margin:0;padding:0;background-color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
 <tr><td align="center" style="padding:40px 20px;">
-<table width="600" cellpadding="0" cellspacing="0" role="presentation"
-  style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.07);">
+<table width="600" cellpadding="0" cellspacing="0" role="presentation" style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.07);">
 <tr><td style="background:linear-gradient(135deg,#0891b2,#3b82f6);padding:28px 32px;text-align:center;">
 <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.5px;">SmartQuote AI</h1>
 </td></tr>
@@ -103,17 +118,12 @@ function appendLinksToBody(body: string, linkLines: string[]): string {
 }
 
 async function getSmtpOrThrow(userId: string): Promise<NonNullable<SmtpConfig>> {
-    const config = await getDecryptedSmtpConfig(userId);
-    if (!config) throw new ValidationError('Skonfiguruj skrzynkę pocztową w ustawieniach SMTP');
-    return config;
+    const cfg = await getDecryptedSmtpConfig(userId);
+    if (!cfg) throw new ValidationError('Skonfiguruj skrzynkę pocztową w ustawieniach SMTP');
+    return cfg;
 }
 
-async function generateOfferPDFBuffer(
-    offerId: string,
-    userId: string,
-    frontendUrl: string,
-): Promise<AttachmentBuffer> {
-    void frontendUrl;
+async function generateOfferPDFBuffer(offerId: string, userId: string): Promise<AttachmentBuffer> {
     const offer = await offersRepository.findByIdForPDFAttachment(offerId, userId);
     if (!offer) throw new NotFoundError('Oferta');
 
@@ -139,10 +149,7 @@ async function generateOfferPDFBuffer(
     };
 }
 
-async function generateContractPDFBuffer(
-    contractId: string,
-    userId: string,
-): Promise<AttachmentBuffer> {
+async function generateContractPDFBuffer(contractId: string, userId: string): Promise<AttachmentBuffer> {
     const contract = await contractsRepository.findByIdForPDFAttachment(contractId, userId);
     if (!contract) throw new NotFoundError('Kontrakt');
 
@@ -172,28 +179,17 @@ async function resolveAttachments(
     attachments: EmailAttachment[],
     userId: string,
     frontendUrl: string,
-): Promise<{
-    nodemailerAttachments: nodemailer.SendMailOptions['attachments'];
-    linkLines: string[];
-}> {
+): Promise<{ nodemailerAttachments: nodemailer.SendMailOptions['attachments']; linkLines: string[] }> {
     const nodemailerAttachments: nodemailer.SendMailOptions['attachments'] = [];
     const linkLines: string[] = [];
 
     for (const att of attachments) {
         if (att.type === 'offer_pdf') {
-            const buf = await generateOfferPDFBuffer(att.resourceId, userId, frontendUrl);
-            nodemailerAttachments.push({
-                filename: buf.filename,
-                content: buf.content,
-                contentType: buf.contentType,
-            });
+            const buf = await generateOfferPDFBuffer(att.resourceId, userId);
+            nodemailerAttachments.push({ filename: buf.filename, content: buf.content, contentType: buf.contentType });
         } else if (att.type === 'contract_pdf') {
             const buf = await generateContractPDFBuffer(att.resourceId, userId);
-            nodemailerAttachments.push({
-                filename: buf.filename,
-                content: buf.content,
-                contentType: buf.contentType,
-            });
+            nodemailerAttachments.push({ filename: buf.filename, content: buf.content, contentType: buf.contentType });
         } else if (att.type === 'offer_link') {
             const offer = await emailComposerRepository.findOfferPublicToken(att.resourceId, userId);
             if (offer?.publicToken) {
@@ -210,14 +206,34 @@ async function resolveAttachments(
     return { nodemailerAttachments, linkLines };
 }
 
+async function executeSend(payload: EmailPayload, smtpConfig: NonNullable<SmtpConfig>): Promise<{ status: EmailLogStatus; errorMessage?: string }> {
+    try {
+        const transporter = createTransporter(smtpConfig);
+        await transporter.sendMail({
+            from: smtpConfig.from,
+            to: payload.to,
+            subject: payload.subject,
+            html: payload.html,
+            text: payload.text,
+            attachments: payload.attachments,
+        });
+        logger.info({ to: payload.to, subject: payload.subject }, 'Email sent successfully');
+        return { status: 'SENT' };
+    } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : 'Nieznany błąd SMTP';
+        logger.error({ err, to: payload.to, smtpHost: smtpConfig.host, errorMessage }, 'SMTP sendMail failed');
+        return { status: 'FAILED', errorMessage };
+    }
+}
+
 class EmailComposerService {
     private readonly frontendUrl: string;
 
     constructor() {
-        this.frontendUrl = (process.env.FRONTEND_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+        this.frontendUrl = config.frontendUrl.replace(/\/$/, '');
     }
 
-    async sendEmail(userId: string, input: SendEmailInput): Promise<{ id: string; status: EmailLogStatus; errorMessage?: string }> {
+    async sendEmail(userId: string, input: SendEmailInput): Promise<SendResult> {
         if (input.saveAsDraft) {
             const log = await emailComposerRepository.createLog({
                 userId,
@@ -233,51 +249,26 @@ class EmailComposerService {
                 templateId: input.templateId,
                 templateName: input.templateName,
             });
+            logger.info({ userId, to: input.to }, 'Email saved as draft');
             return { id: log.id, status: 'DRAFT' };
         }
 
         const smtpConfig = await getSmtpOrThrow(userId);
-        const attachments = input.attachments ?? [];
-
-        const { nodemailerAttachments, linkLines } = await resolveAttachments(
-            attachments,
-            userId,
-            this.frontendUrl,
-        );
+        const { nodemailerAttachments, linkLines } = await resolveAttachments(input.attachments ?? [], userId, this.frontendUrl);
         const finalBody = appendLinksToBody(input.body, linkLines);
         const htmlBody = buildHtmlBody(finalBody);
 
-        let status: EmailLogStatus = 'SENT';
-        let errorMessage: string | undefined;
-
-        try {
-            const transporter = createTransporter(smtpConfig);
-            await transporter.sendMail({
+        const { status, errorMessage } = await executeSend(
+            {
                 from: smtpConfig.from,
                 to: input.toName ? `"${input.toName}" <${input.to}>` : input.to,
                 subject: input.subject,
                 html: htmlBody,
                 text: htmlToPlainText(finalBody),
                 attachments: nodemailerAttachments,
-            });
-            logger.info({ userId, to: input.to, subject: input.subject }, 'Email sent successfully');
-        } catch (err: unknown) {
-            status = 'FAILED';
-            errorMessage = err instanceof Error ? err.message : 'Nieznany błąd SMTP';
-            logger.error(
-                {
-                    err,
-                    userId,
-                    to: input.to,
-                    smtpHost: smtpConfig.host,
-                    smtpPort: smtpConfig.port,
-                    smtpUser: smtpConfig.user,
-                    smtpFrom: smtpConfig.from,
-                    errorMessage,
-                },
-                'SMTP sendMail failed',
-            );
-        }
+            },
+            smtpConfig,
+        );
 
         const log = await emailComposerRepository.createLog({
             userId,
@@ -287,7 +278,7 @@ class EmailComposerService {
             body: input.body,
             status,
             errorMessage,
-            attachments,
+            attachments: input.attachments ?? [],
             clientId: input.clientId,
             offerId: input.offerId,
             contractId: input.contractId,
@@ -298,68 +289,39 @@ class EmailComposerService {
         return { id: log.id, status, errorMessage };
     }
 
-    async sendDraft(userId: string, draftId: string): Promise<{ id: string; status: EmailLogStatus; errorMessage?: string }> {
+    async sendDraft(userId: string, draftId: string): Promise<SendResult> {
         const draft = await emailComposerRepository.findDraftById(draftId, userId);
         if (!draft) throw new NotFoundError('Szkic');
 
         const smtpConfig = await getSmtpOrThrow(userId);
         const attachments = (draft.attachments as unknown as EmailAttachment[]) ?? [];
-
-        const { nodemailerAttachments, linkLines } = await resolveAttachments(
-            attachments,
-            userId,
-            this.frontendUrl,
-        );
+        const { nodemailerAttachments, linkLines } = await resolveAttachments(attachments, userId, this.frontendUrl);
         const finalBody = appendLinksToBody(draft.body, linkLines);
         const htmlBody = buildHtmlBody(finalBody);
 
-        let newStatus: EmailLogStatus = 'SENT';
-        let errorMessage: string | undefined;
-
-        try {
-            const transporter = createTransporter(smtpConfig);
-            await transporter.sendMail({
+        const { status, errorMessage } = await executeSend(
+            {
                 from: smtpConfig.from,
                 to: draft.toName ? `"${draft.toName}" <${draft.to}>` : draft.to,
                 subject: draft.subject,
                 html: htmlBody,
                 text: htmlToPlainText(finalBody),
                 attachments: nodemailerAttachments,
-            });
-            logger.info({ userId, draftId, to: draft.to }, 'Draft sent successfully');
-        } catch (err: unknown) {
-            newStatus = 'FAILED';
-            errorMessage = err instanceof Error ? err.message : 'Nieznany błąd SMTP';
-            logger.error(
-                {
-                    err,
-                    userId,
-                    draftId,
-                    to: draft.to,
-                    smtpHost: smtpConfig.host,
-                    smtpPort: smtpConfig.port,
-                    smtpUser: smtpConfig.user,
-                    smtpFrom: smtpConfig.from,
-                    errorMessage,
-                },
-                'SMTP sendMail (draft) failed',
-            );
-        }
+            },
+            smtpConfig,
+        );
 
         const updated = await emailComposerRepository.updateLog(draftId, {
-            status: newStatus,
+            status,
             errorMessage,
-            sentAt: newStatus === 'SENT' ? new Date() : undefined,
+            sentAt: status === 'SENT' ? new Date() : undefined,
         });
 
-        return { id: updated.id, status: newStatus, errorMessage };
+        logger.info({ userId, draftId, status }, 'Draft sent');
+        return { id: updated.id, status, errorMessage };
     }
 
-    async updateDraft(
-        userId: string,
-        draftId: string,
-        input: UpdateDraftInput,
-    ): Promise<{ id: string }> {
+    async updateDraft(userId: string, draftId: string, input: UpdateDraftInput): Promise<{ id: string }> {
         const draft = await emailComposerRepository.findDraftById(draftId, userId);
         if (!draft) throw new NotFoundError('Szkic');
 

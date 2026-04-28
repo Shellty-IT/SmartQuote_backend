@@ -77,7 +77,6 @@ export class EmailComposerRepository {
             templateName: data.templateName,
         };
 
-        // ← ZMIENIONE: nested updates dla relations
         if (data.clientId !== undefined) {
             prismaData.client = data.clientId ? { connect: { id: data.clientId } } : { disconnect: true };
         }
