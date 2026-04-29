@@ -2,6 +2,7 @@
 import { randomBytes } from 'crypto';
 import { OfferStatus } from '@prisma/client';
 import { config } from '../config';
+import { createModuleLogger } from '../lib/logger';
 import { offersRepository, OfferItemData, UpdateOfferData } from '../repositories/offers.repository';
 import { CreateOfferInput, UpdateOfferInput, OfferItemInput } from '../types';
 import { generateOfferNumber } from '../utils/offerNumber';
@@ -13,6 +14,7 @@ import { NotFoundError, ValidationError, ExternalServiceError } from '../errors/
 import { mapToPDFUser, mapToPDFClient } from './pdf/data-mapper';
 import { pdfService } from './pdf';
 
+const logger = createModuleLogger('offers-service');
 const frontendUrl = config.frontendUrl.replace(/\/$/, '');
 
 function mapItemToData(item: ItemWithTotals): OfferItemData {
@@ -55,6 +57,8 @@ export class OffersService {
         const number = await generateOfferNumber(userId);
         const itemsWithTotals = buildItemsWithTotals(data.items);
         const offerTotals = calculateOfferTotals(itemsWithTotals);
+
+        logger.info({ userId, offerNumber: number }, 'Creating offer');
 
         return offersRepository.create({
             number,
@@ -137,6 +141,7 @@ export class OffersService {
             previousStatus !== data.status;
 
         if (isTerminalChange) {
+            logger.info({ offerId: id, status: data.status }, 'Triggering post-mortem');
             triggerPostMortem(userId, id, data.status as 'ACCEPTED' | 'REJECTED', 'manual');
         }
 
@@ -179,6 +184,8 @@ export class OffersService {
         if (!original) throw new NotFoundError('Oferta');
 
         const number = await generateOfferNumber(userId);
+
+        logger.info({ userId, originalId: id, offerNumber: number }, 'Duplicating offer');
 
         return offersRepository.create({
             number,
@@ -236,6 +243,8 @@ export class OffersService {
             sentAt: offer.status === 'DRAFT' ? new Date() : undefined,
         });
 
+        logger.info({ offerId, publicToken }, 'Offer published');
+
         return {
             publicToken: updated.publicToken,
             publicUrl: `${frontendUrl}/offer/view/${updated.publicToken}`,
@@ -251,6 +260,8 @@ export class OffersService {
             publicToken: null,
             isInteractive: false,
         });
+
+        logger.info({ offerId }, 'Offer unpublished');
 
         return true;
     }
@@ -281,7 +292,10 @@ export class OffersService {
         };
     }
 
-    async sendOfferToClient(offerId: string, userId: string): Promise<{ sent: boolean; email: string }> {
+    async sendOfferToClient(
+        offerId: string,
+        userId: string,
+    ): Promise<{ sent: boolean; email: string }> {
         const offer = await offersRepository.findByIdForEmail(offerId, userId);
         if (!offer) throw new NotFoundError('Oferta');
 
@@ -320,11 +334,10 @@ export class OffersService {
         );
 
         if (!sent) {
-            throw new ExternalServiceError(
-                'SMTP',
-                'Nie udało się wysłać emaila. Sprawdź konfigurację SMTP',
-            );
+            throw new ExternalServiceError('SMTP', 'Nie udało się wysłać emaila. Sprawdź konfigurację SMTP');
         }
+
+        logger.info({ offerId, clientEmail: offer.client.email }, 'Offer email sent');
 
         return { sent: true, email: offer.client.email };
     }
