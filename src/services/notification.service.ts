@@ -1,9 +1,21 @@
 // src/services/notification.service.ts
 import { NotificationType } from '@prisma/client';
 import prisma from '../lib/prisma';
+import { createModuleLogger } from '../lib/logger';
 import { emailService } from './email';
 import { getDecryptedSmtpConfig } from './settings.service';
 import type { SmtpConfig } from '../types';
+
+const logger = createModuleLogger('notification-service');
+
+interface NotificationRecord {
+    userId: string;
+    type: NotificationType;
+    title: string;
+    message: string;
+    link?: string;
+    metadata?: Record<string, string | number | boolean | null>;
+}
 
 interface OfferNotificationData {
     offerId: string;
@@ -36,15 +48,24 @@ interface FollowUpReminderNotificationData {
     contractNumber: string | null;
 }
 
+interface SmtpSettingsRow {
+    emailNotifications: boolean;
+    smtpConfigured: boolean;
+    offerNotifications?: boolean;
+    followUpReminders?: boolean;
+}
+
+const TYPE_LABELS: Record<string, string> = {
+    CALL: 'Telefon',
+    EMAIL: 'Email',
+    MEETING: 'Spotkanie',
+    TASK: 'Zadanie',
+    REMINDER: 'Przypomnienie',
+    OTHER: 'Inne',
+};
+
 class NotificationService {
-    private async createRecord(data: {
-        userId: string;
-        type: NotificationType;
-        title: string;
-        message: string;
-        link?: string;
-        metadata?: Record<string, string | number | boolean | null>;
-    }) {
+    private async createRecord(data: NotificationRecord) {
         return prisma.notification.create({
             data: {
                 userId: data.userId,
@@ -57,48 +78,41 @@ class NotificationService {
         });
     }
 
-    private async getSmtpIfEnabled(userId: string): Promise<SmtpConfig | null> {
-        const settings = await prisma.userSettings.findUnique({
-            where: { userId },
-            select: {
-                emailNotifications: true,
-                offerNotifications: true,
-                smtpConfigured: true,
-            },
-        });
-
+    private async getSmtp(
+        userId: string,
+        settings: SmtpSettingsRow | null,
+    ): Promise<SmtpConfig | null> {
         if (!settings) return null;
-        if (!settings.emailNotifications || !settings.offerNotifications) return null;
-        if (!settings.smtpConfigured) return null;
+        if (!settings.emailNotifications || !settings.smtpConfigured) return null;
 
         try {
             return await getDecryptedSmtpConfig(userId);
         } catch (err: unknown) {
-            console.error('❌ Failed to get SMTP config for user:', userId, err);
+            logger.error({ err, userId }, 'Failed to get SMTP config');
             return null;
         }
+    }
+
+    private async getSmtpIfEnabled(userId: string): Promise<SmtpConfig | null> {
+        const settings = await prisma.userSettings.findUnique({
+            where: { userId },
+            select: { emailNotifications: true, offerNotifications: true, smtpConfigured: true },
+        });
+
+        if (!settings?.offerNotifications) return null;
+
+        return this.getSmtp(userId, settings);
     }
 
     private async getSmtpForFollowUps(userId: string): Promise<SmtpConfig | null> {
         const settings = await prisma.userSettings.findUnique({
             where: { userId },
-            select: {
-                emailNotifications: true,
-                followUpReminders: true,
-                smtpConfigured: true,
-            },
+            select: { emailNotifications: true, followUpReminders: true, smtpConfigured: true },
         });
 
-        if (!settings) return null;
-        if (!settings.emailNotifications || !settings.followUpReminders) return null;
-        if (!settings.smtpConfigured) return null;
+        if (!settings?.followUpReminders) return null;
 
-        try {
-            return await getDecryptedSmtpConfig(userId);
-        } catch (err: unknown) {
-            console.error('❌ Failed to get SMTP config for user:', userId, err);
-            return null;
-        }
+        return this.getSmtp(userId, settings);
     }
 
     async offerViewed(userId: string, data: OfferNotificationData): Promise<void> {
@@ -109,17 +123,18 @@ class NotificationService {
                 title: 'Klient otworzył ofertę',
                 message: `${data.clientName} wyświetlił ofertę ${data.offerNumber} — ${data.offerTitle}`,
                 link: `/dashboard/offers/${data.offerId}`,
-                metadata: {
-                    offerId: data.offerId,
-                    offerNumber: data.offerNumber,
-                },
+                metadata: { offerId: data.offerId, offerNumber: data.offerNumber },
             });
-        } catch (error: unknown) {
-            console.error('❌ Notification error (offerViewed):', error);
+        } catch (err: unknown) {
+            logger.error({ err, userId, offerId: data.offerId }, 'Notification error (offerViewed)');
         }
     }
 
-    async offerAccepted(userId: string, userEmail: string, data: OfferAcceptedNotificationData): Promise<void> {
+    async offerAccepted(
+        userId: string,
+        userEmail: string,
+        data: OfferAcceptedNotificationData,
+    ): Promise<void> {
         try {
             await this.createRecord({
                 userId,
@@ -138,21 +153,26 @@ class NotificationService {
             const smtp = await this.getSmtpIfEnabled(userId);
             if (smtp) {
                 emailService.sendOfferAccepted(userEmail, data, smtp).catch((err: unknown) => {
-                    console.error('❌ Email failed (offerAccepted):', err);
+                    logger.error({ err, userId, offerId: data.offerId }, 'Email failed (offerAccepted)');
                 });
             }
-        } catch (error: unknown) {
-            console.error('❌ Notification error (offerAccepted):', error);
+        } catch (err: unknown) {
+            logger.error({ err, userId, offerId: data.offerId }, 'Notification error (offerAccepted)');
         }
     }
 
-    async offerRejected(userId: string, userEmail: string, data: OfferRejectedNotificationData): Promise<void> {
+    async offerRejected(
+        userId: string,
+        userEmail: string,
+        data: OfferRejectedNotificationData,
+    ): Promise<void> {
         try {
             await this.createRecord({
                 userId,
                 type: 'OFFER_REJECTED',
                 title: 'Oferta odrzucona',
-                message: `${data.clientName} odrzucił ofertę ${data.offerNumber} — ${data.offerTitle}${data.reason ? `. Powód: ${data.reason}` : ''}`,
+                message: `${data.clientName} odrzucił ofertę ${data.offerNumber} — ${data.offerTitle}` +
+                    `${data.reason ? `. Powód: ${data.reason}` : ''}`,
                 link: `/dashboard/offers/${data.offerId}`,
                 metadata: {
                     offerId: data.offerId,
@@ -164,15 +184,19 @@ class NotificationService {
             const smtp = await this.getSmtpIfEnabled(userId);
             if (smtp) {
                 emailService.sendOfferRejected(userEmail, data, smtp).catch((err: unknown) => {
-                    console.error('❌ Email failed (offerRejected):', err);
+                    logger.error({ err, userId, offerId: data.offerId }, 'Email failed (offerRejected)');
                 });
             }
-        } catch (error: unknown) {
-            console.error('❌ Notification error (offerRejected):', error);
+        } catch (err: unknown) {
+            logger.error({ err, userId, offerId: data.offerId }, 'Notification error (offerRejected)');
         }
     }
 
-    async offerComment(userId: string, userEmail: string, data: CommentNotificationData): Promise<void> {
+    async offerComment(
+        userId: string,
+        userEmail: string,
+        data: CommentNotificationData,
+    ): Promise<void> {
         try {
             const preview = data.commentPreview.length > 100
                 ? `${data.commentPreview.substring(0, 100)}...`
@@ -184,33 +208,32 @@ class NotificationService {
                 title: 'Nowy komentarz od klienta',
                 message: `${data.clientName} skomentował ofertę ${data.offerNumber}: "${preview}"`,
                 link: `/dashboard/offers/${data.offerId}`,
-                metadata: {
-                    offerId: data.offerId,
-                    offerNumber: data.offerNumber,
-                },
+                metadata: { offerId: data.offerId, offerNumber: data.offerNumber },
             });
 
             const smtp = await this.getSmtpIfEnabled(userId);
             if (smtp) {
-                emailService.sendNewComment(userEmail, {
-                    ...data,
-                    commentPreview: preview,
-                }, smtp).catch((err: unknown) => {
-                    console.error('❌ Email failed (offerComment):', err);
-                });
+                emailService.sendNewComment(userEmail, { ...data, commentPreview: preview }, smtp)
+                    .catch((err: unknown) => {
+                        logger.error({ err, userId, offerId: data.offerId }, 'Email failed (offerComment)');
+                    });
             }
-        } catch (error: unknown) {
-            console.error('❌ Notification error (offerComment):', error);
+        } catch (err: unknown) {
+            logger.error({ err, userId, offerId: data.offerId }, 'Notification error (offerComment)');
         }
     }
 
-    async aiInsight(userId: string, data: { offerId: string; offerNumber: string; outcome: string }): Promise<void> {
+    async aiInsight(
+        userId: string,
+        data: { offerId: string; offerNumber: string; outcome: string },
+    ): Promise<void> {
         try {
             await this.createRecord({
                 userId,
                 type: 'AI_INSIGHT',
                 title: 'Nowy insight AI',
-                message: `Analiza post-mortem oferty ${data.offerNumber} jest gotowa (${data.outcome === 'ACCEPTED' ? 'zaakceptowana' : 'odrzucona'})`,
+                message: `Analiza post-mortem oferty ${data.offerNumber} jest gotowa ` +
+                    `(${data.outcome === 'ACCEPTED' ? 'zaakceptowana' : 'odrzucona'})`,
                 link: `/dashboard/offers/${data.offerId}`,
                 metadata: {
                     offerId: data.offerId,
@@ -218,12 +241,16 @@ class NotificationService {
                     outcome: data.outcome,
                 },
             });
-        } catch (error: unknown) {
-            console.error('❌ Notification error (aiInsight):', error);
+        } catch (err: unknown) {
+            logger.error({ err, userId, offerId: data.offerId }, 'Notification error (aiInsight)');
         }
     }
 
-    async followUpReminder(userId: string, userEmail: string, data: FollowUpReminderNotificationData): Promise<void> {
+    async followUpReminder(
+        userId: string,
+        userEmail: string,
+        data: FollowUpReminderNotificationData,
+    ): Promise<void> {
         try {
             const contextParts: string[] = [];
             if (data.clientName) contextParts.push(`Klient: ${data.clientName}`);
@@ -238,16 +265,7 @@ class NotificationService {
                 year: 'numeric',
             });
 
-            const typeLabels: Record<string, string> = {
-                CALL: 'Telefon',
-                EMAIL: 'Email',
-                MEETING: 'Spotkanie',
-                TASK: 'Zadanie',
-                REMINDER: 'Przypomnienie',
-                OTHER: 'Inne',
-            };
-
-            const typeLabel = typeLabels[data.type] || data.type;
+            const typeLabel = TYPE_LABELS[data.type] || data.type;
 
             await this.createRecord({
                 userId,
@@ -273,11 +291,11 @@ class NotificationService {
                     offerNumber: data.offerNumber,
                     contractNumber: data.contractNumber,
                 }, smtp).catch((err: unknown) => {
-                    console.error('❌ Email failed (followUpReminder):', err);
+                    logger.error({ err, userId, followUpId: data.followUpId }, 'Email failed (followUpReminder)');
                 });
             }
-        } catch (error: unknown) {
-            console.error('❌ Notification error (followUpReminder):', error);
+        } catch (err: unknown) {
+            logger.error({ err, userId, followUpId: data.followUpId }, 'Notification error (followUpReminder)');
         }
     }
 
