@@ -2,7 +2,7 @@
 import { Logger } from 'pino';
 import { notificationService } from '../notification.service';
 import { emailService } from '../email';
-import { getDecryptedSmtpConfig } from '../settings.service';
+import { getEffectiveSmtpConfig } from '../settings.service';
 import { triggerPostMortem } from '../shared/postmortem.utils';
 
 export class PublicOfferNotifier {
@@ -89,7 +89,7 @@ export class PublicOfferNotifier {
             return;
         }
 
-        getDecryptedSmtpConfig(userId)
+        getEffectiveSmtpConfig(userId)
             .then((smtpConfig) => {
                 if (!smtpConfig) {
                     this.logger.warn({ userId }, 'SMTP not configured');

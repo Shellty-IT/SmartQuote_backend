@@ -1,5 +1,5 @@
 // src/services/email-composer.service.ts
-import { getDecryptedSmtpConfig } from './settings.service';
+import { getEffectiveSmtpConfig } from './settings.service';
 import { emailComposerRepository } from '../repositories/email-composer.repository';
 import { NotFoundError, ValidationError } from '../errors/domain.errors';
 import { createModuleLogger } from '../lib/logger';
@@ -31,7 +31,7 @@ interface SendResult {
 }
 
 async function getSmtpOrThrow(userId: string): Promise<NonNullable<SmtpConfig>> {
-    const cfg = await getDecryptedSmtpConfig(userId);
+    const cfg = await getEffectiveSmtpConfig(userId);
     if (!cfg) throw new ValidationError('Skonfiguruj skrzynkę pocztową w ustawieniach SMTP');
     return cfg;
 }

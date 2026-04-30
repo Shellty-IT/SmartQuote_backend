@@ -124,6 +124,27 @@ export async function toggleApiKey(req: Request, res: Response, next: NextFuncti
     }
 }
 
+export async function getSenderEmail(req: Request, res: Response, next: NextFunction) {
+    try {
+        const userId = req.user!.id;
+        const result = await settingsService.getSenderEmail(userId);
+        successResponse(res, result);
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function updateSenderEmail(req: Request, res: Response, next: NextFunction) {
+    try {
+        const userId = req.user!.id;
+        const { senderEmail } = req.body;
+        const result = await settingsService.updateSenderEmail(userId, senderEmail);
+        successResponse(res, result);
+    } catch (error) {
+        next(error);
+    }
+}
+
 export async function getSmtpConfig(req: Request, res: Response, next: NextFunction) {
     try {
         const userId = req.user!.id;
