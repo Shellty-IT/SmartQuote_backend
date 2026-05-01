@@ -90,6 +90,23 @@ export async function updateSettings(
     return { ...settings, smtpPass: settings.smtpPass ? '••••••••' : null };
 }
 
+export async function getSenderEmail(userId: string) {
+    const settings = await prisma.userSettings.findUnique({
+        where: { userId },
+        select: { senderEmail: true },
+    });
+    return { senderEmail: settings?.senderEmail ?? null };
+}
+
+export async function updateSenderEmail(userId: string, senderEmail: string) {
+    const settings = await prisma.userSettings.upsert({
+        where: { userId },
+        update: { senderEmail },
+        create: { userId, senderEmail },
+    });
+    return { senderEmail: settings.senderEmail };
+}
+
 export async function getSmtpConfig(userId: string) {
     const settings = await prisma.userSettings.findUnique({
         where: { userId },
@@ -228,6 +245,33 @@ export async function getDecryptedSmtpConfig(userId: string): Promise<SmtpConfig
         logger.error({ err, userId }, 'SMTP password decryption failed');
         return null;
     }
+}
+
+export async function getResendConfig(userId: string): Promise<SmtpConfig | null> {
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (!resendApiKey) return null;
+
+    const settings = await prisma.userSettings.findUnique({
+        where: { userId },
+        select: { senderEmail: true },
+    });
+
+    const replyTo = settings?.senderEmail ?? undefined;
+
+    return {
+        host: 'smtp.resend.com',
+        port: 465,
+        user: 'resend',
+        pass: resendApiKey,
+        from: 'SmartQuote AI <onboarding@resend.dev>',
+        replyTo,
+    };
+}
+
+export async function getEffectiveSmtpConfig(userId: string): Promise<SmtpConfig | null> {
+    const userSmtp = await getDecryptedSmtpConfig(userId);
+    if (userSmtp) return userSmtp;
+    return getResendConfig(userId);
 }
 
 export async function testSavedSmtpConnection(userId: string): Promise<{ success: boolean; error?: string }> {

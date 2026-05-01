@@ -53,6 +53,7 @@ model UserSettings {
   aiTone            String  @default("professional")
   aiAutoSuggestions Boolean @default(true)
 
+  senderEmail    String?
   smtpHost       String?
   smtpPort       Int?    @default(587)
   smtpUser       String?

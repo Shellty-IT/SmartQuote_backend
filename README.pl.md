@@ -2,7 +2,7 @@
 <!-- smartquote_backend/README.pl.md -->
 
 <div align="center">
-  <img src="https://github.com/Shellty-IT/SmartQuote-AI/blob/master/public/favicon.svg" alt="SmartQuote AI" width="100" height="100">
+  <img src="https://raw.githubusercontent.com/Shellty-IT/SmartQuote-AI/master/public/favicon.svg" alt="SmartQuote AI" width="100" height="100">
 
 # SmartQuote AI — Backend
 
@@ -14,7 +14,6 @@
 [![License](https://img.shields.io/badge/license-Proprietary-red)](./LICENSE)
 
 **[🚀 Demo na żywo](https://smartquote-ai.netlify.app)** • [Repozytorium Frontend](https://github.com/Shellty-IT/SmartQuote-AI) • [🇬🇧 English version](./README.md)
-
 </div>
 
 ---
@@ -23,21 +22,19 @@
 
 RESTful API backend dla systemu CRM sprzedażowego z funkcjami AI. Obsługuje klientów, oferty, umowy, automatyczne emaile, generowanie PDF oraz integrację z Google Gemini do inteligentnych analiz sprzedażowych.
 
-> **Wypróbuj na żywo:** [smartquote-ai.netlify.app](https://smartquote-ai.netlify.app)  
-> *(Dane testowe dostępne na stronie logowania)*
 
 ---
 
 ## 🛠️ Stack Technologiczny
 
-| Warstwa | Technologia | Dlaczego wybrałem |
-|---------|-------------|-------------------|
-| **Język** | TypeScript 5.5 | Bezpieczeństwo typów, lepsze DX |
+| Warstwa | Technologia | Dlaczego |
+|---------|-------------|----------|
+| **Język** | TypeScript 5.5 | Bezpieczeństwo typów, strict mode |
 | **Framework** | Express.js 4.21 | Standard branżowy, elastyczny |
 | **Baza danych** | PostgreSQL + Prisma ORM | Dane relacyjne, type-safe queries |
-| **AI** | Google Gemini 2.5 Flash | Szybkie odpowiedzi AI w czasie rzeczywistym |
-| **Autentykacja** | JWT + bcrypt | Stateless auth z cache (5min) |
-| **Walidacja** | Zod | Runtime type checking |
+| **AI** | Google Gemini 2.5 Flash | Szybkie AI dla funkcji real-time |
+| **Auth** | JWT + bcrypt | Stateless auth z cache (5min TTL) |
+| **Walidacja** | Zod | Runtime schema validation |
 | **Logowanie** | Pino | Strukturalne logi JSON |
 | **Testy** | Jest | Testy jednostkowe logiki biznesowej |
 | **CI/CD** | GitHub Actions | Auto-deploy do Railway przy push |
@@ -45,91 +42,92 @@ RESTful API backend dla systemu CRM sprzedażowego z funkcjami AI. Obsługuje kl
 
 ---
 
+
 ## 🏗️ Architektura
 
-Wzorzec Clean Architecture: **Controller → Service → Repository → Database**
+**Clean Architecture** — ścisła separacja odpowiedzialności:
 
-```mermaid
-flowchart TB
-    A[HTTP Request] --> B[Warstwa Middleware]
-    B --> C{Cache Auth}
-    C -->|Trafienie| D[Controller]
-    C -->|Pudło| E[Baza Danych]
-    E --> D
-    D --> F[Warstwa Serwisów]
-    F --> G[Repository]
-    G --> H[(PostgreSQL)]
-    F --> I[Serwis AI]
-    F --> J[Serwis PDF]
-    F --> K[Serwis Email]
-    I --> L[Google Gemini]
-    J --> M[PDFKit]
-    K --> N[Nodemailer]
-    
-    style B fill:#e3f2fd
-    style F fill:#fff3e0
-    style G fill:#f1f8e9
-    style H fill:#e8f5e9
-Kluczowe decyzje projektowe:
-
-Szczupłe Controllery — Tylko try/catch + next(err), zero logiki biznesowej
-Grube Serwisy — Cała logika domenowa, kalkulacje, wywołania zewnętrzne
-Czyste Repozytoria — Tylko zapytania Prisma, zwracają surowe dane
-Cache Auth (5min TTL) — Redukcja obciążenia DB o ~80% na endpointach wymagających autoryzacji
-Globalny Error Handler — Jedno źródło prawdy dla odpowiedzi błędów + logowania
-Strukturalne Logowanie — JSON w prod (dla agregatów logów), pretty-print w dev
-📁 Struktura Projektu
+**Przepływ żądania:**
+Klient → Middleware → Controller → Service → Repository → Baza danych
+↓
+Zewnętrzne API (Gemini, PDFKit, SMTP)
 
 
-src/
-├── controllers/       # Warstwa HTTP (14 kontrolerów)
-├── services/          # Logika biznesowa
-│   ├── ai/           # Modułowe serwisy AI (8 plików)
-│   ├── pdf/          # Generowanie PDF (10 plików)
-│   ├── email/        # Obsługa emaili (5 plików)
-│   └── shared/       # Współdzielone narzędzia
-├── repositories/      # Warstwa dostępu do danych (7 repo)
-├── routes/           # Definicje tras API
-├── middleware/       # Auth, walidacja, obsługa błędów
-├── validators/       # Schematy Zod (11 walidatorów)
-├── lib/              # Podstawowe biblioteki (Prisma, logger, cache)
-├── types/            # Definicje TypeScript
-├── utils/            # Funkcje pomocnicze
-└── __tests__/        # Testy jednostkowe Jest
 
-prisma/
-├── schema.prisma     # 15 modeli z relacjami
-└── migrations/       # Wersjonowane zmiany DB
+**Odpowiedzialności warstw:**
 
-fonts/                # DejaVu Sans dla UTF-8 w PDF
-✨ Co zbudowałem
-Podstawowy CRM
-Zarządzanie klientami — Firmy i osoby prywatne z pełnymi danymi kontaktowymi
-Cykl życia oferty — 7 statusów (DRAFT → SENT → VIEWED → ACCEPTED/REJECTED)
-Workflow umów — Podpis cyfrowy z certyfikacją SHA-256
-System follow-upów — Automatyczne przypomnienia emailowe dla zaległych zadań
-Analityka dashboard — Metryki sprzedaży i współczynniki konwersji w czasie rzeczywistym
-Funkcje AI (Google Gemini)
-Asystent Chat — Interfejs języka naturalnego dla operacji CRM
-Generator ofert — Tworzenie ofert z opisów tekstowych
-Szablony emaili — Profesjonalne emaile generowane przez AI
-Price Insight — Rekomendacje cenowe oparte na rynku
-Tryb Observer — Analityka wydajności ofert w czasie rzeczywistym
-Strategia zamknięcia — Sugestie AI do finalizacji transakcji
-Feedback Loop — Analiza post-mortem wygranych/przegranych ofert
-Generowanie dokumentów
-Silnik PDF — Własny renderer z DejaVu Sans (polskie znaki UTF-8)
-Dynamiczny branding — Logo i kolor główny per użytkownik
-Kalkulacje VAT — Multi-walutowe z automatycznym liczeniem podatku
-Certyfikaty akceptacji — Prawnie wiążący audit trail w PDF
-Integracje
-KSeF Bridge — Webhook zewnętrznego systemu fakturowania
-Email Composer — Bogate emaile HTML z załącznikami PDF
-Publiczne strony ofert — Linki do udostępnienia z wyborem wariantów
-Podpisy elektroniczne — Podpis canvas z weryfikacją kryptograficzną
-🚀 Szybki Start
-Bash
+| Warstwa | Odpowiedzialność | Zasady |
+|---------|------------------|--------|
+| **Middleware** | Zagadnienia przekrojowe | Cache auth (5min TTL), walidacja Zod, logowanie Pino |
+| **Controller** | Interfejs HTTP | Tylko `try/catch + next(err)` — **zero logiki biznesowej** |
+| **Service** | Logika biznesowa | Reguły domenowe, kalkulacje, orkiestracja repozytoriów i zewnętrznych API |
+| **Repository** | Dostęp do danych | Tylko zapytania Prisma, zwraca surowe dane — **zero logiki** |
+| **Serwisy zewnętrzne** | Integracje third-party | Google Gemini AI, PDFKit (generowanie PDF), Nodemailer (SMTP) |
 
+**Kluczowe zasady:**
+- Controllery są **głupie** — tylko przekazują błędy do globalnego handlera
+- Serwisy są **mądre** — cała logika domenowa tu się znajduje
+- Repozytoria są **czyste** — bez logiki biznesowej, tylko zapytania do bazy
+- Cache auth redukuje obciążenie DB o ~80% na żądaniach wymagających uwierzytelnienia
+
+## 📁 Struktura Projektu
+
+| Katalog | Zawartość |
+|---------|-----------|
+| `src/controllers/` | Handlery żądań HTTP — 14 kontrolerów |
+| `src/services/ai/` | Modułowe serwisy AI (chat, analiza, price insight, observer, closing strategy, feedback loop) |
+| `src/services/pdf/` | Silnik renderowania PDF (oferta, umowa, podpis, certyfikat) |
+| `src/services/email/` | Wysyłanie emaili, szablony, załączniki |
+| `src/services/shared/` | Współdzielone kalkulacje i narzędzia |
+| `src/repositories/` | Zapytania Prisma do bazy — 7 repozytoriów |
+| `src/routes/` | Definicje tras Express — 14 plików route |
+| `src/middleware/` | Auth (JWT + cache), walidacja Zod, globalny error handler |
+| `src/validators/` | Schematy Zod dla walidacji żądań — 11 walidatorów |
+| `src/lib/` | Prisma client, Pino logger, cache auth (5min TTL) |
+| `src/types/` | Definicje typów TypeScript |
+| `src/utils/` | Helpery API response, kalkulacje, crypto, numeracja ofert |
+| `src/errors/` | Własne klasy błędów domenowych |
+| `src/config/` | Centralna konfiguracja aplikacji |
+| `src/__tests__/` | Testy jednostkowe Jest |
+| `prisma/` | Schema (15 modeli) + historia migracji |
+| `fonts/` | DejaVu Sans TTF — obsługa UTF-8 dla polskich znaków w PDF |
+
+---
+
+## ✨ Co zbudowałem
+
+### Podstawowy CRM
+- **Zarządzanie klientami** — Firmy i osoby prywatne z historią kontaktów
+- **Cykl życia oferty** — 7 statusów: DRAFT → SENT → VIEWED → ACCEPTED / REJECTED
+- **Workflow umów** — DRAFT → PENDING_SIGNATURE → ACTIVE → COMPLETED
+- **System follow-upów** — Automatyczne przypomnienia emailowe dla zaległych zadań
+- **Analityka dashboard** — Metryki sprzedaży i współczynniki konwersji
+
+### Funkcje AI (Google Gemini 2.5 Flash)
+- **Asystent Chat** — Interfejs języka naturalnego dla operacji CRM
+- **Generator ofert** — Tworzenie ofert z opisów tekstowych
+- **Price Insight** — Rekomendacje cenowe oparte na rynku
+- **Tryb Observer** — Analiza wydajności ofert w czasie rzeczywistym
+- **Strategia zamknięcia** — Sugestie AI do finalizacji transakcji
+- **Feedback Loop** — Analiza post-mortem wygranych/przegranych ofert
+
+### Generowanie dokumentów
+- **Silnik PDF** — Własny renderer z DejaVu Sans (polskie znaki UTF-8)
+- **Dynamiczny branding** — Logo i kolor główny per użytkownik w PDF
+- **Kalkulacje VAT** — Automatyczne liczenie podatku per pozycja
+- **Certyfikaty akceptacji** — Audit trail z podpisem SHA-256 w PDF
+
+### Integracje
+- **KSeF Bridge** — Webhook zewnętrznego systemu fakturowania
+- **Email Composer** — Emaile HTML z załącznikami PDF przez Nodemailer
+- **Publiczne strony ofert** — Linki z tokenem i wyborem wariantów
+- **Podpisy elektroniczne** — Podpis canvas z weryfikacją kryptograficzną
+
+---
+
+## 🚀 Szybki Start
+
+```bash
 # 1. Sklonuj i zainstaluj
 git clone https://github.com/Shellty-IT/SmartQuote_backend.git
 cd SmartQuote_backend
@@ -137,93 +135,88 @@ npm install
 
 # 2. Skonfiguruj środowisko
 cp .env.example .env
-# Edytuj .env: URL bazy danych, JWT secret, klucz Gemini API
+# Uzupełnij DATABASE_URL, JWT_SECRET, GEMINI_API_KEY
 
 # 3. Setup bazy danych
 npx prisma generate
 npx prisma migrate dev
-npm run seed  # Opcjonalnie: dodaj przykładowe dane
+npm run seed        # opcjonalnie: dodaj przykładowe dane
 
 # 4. Uruchom serwer deweloperski
 npm run dev
-# Serwer działa na http://localhost:5000
+# → http://localhost:5000
 🔐 Zmienne Środowiskowe
 Zmienna	Wymagana	Opis
 DATABASE_URL	✅	Connection string PostgreSQL
-JWT_SECRET	✅	Sekret do podpisywania JWT (min. 32 znaki)
+JWT_SECRET	✅	Sekret JWT (min. 32 znaki)
 GEMINI_API_KEY	✅	Klucz API Google Gemini
 FRONTEND_URL	✅	URL frontendu dla CORS
 ENCRYPTION_KEY	✅	32-znakowy klucz szyfrowania
-SMTP_*	❌	Konfiguracja serwera email (opcjonalnie)
-KSEF_MASTER_*	❌	Zewnętrzne fakturowanie (opcjonalnie)
-Zobacz .env.example dla pełnej listy.
+SMTP_HOST	❌	Hostname serwera SMTP
+SMTP_PORT	❌	Port serwera SMTP (domyślnie: 587)
+SMTP_USER	❌	Nazwa użytkownika SMTP
+SMTP_PASS	❌	Hasło SMTP
+SMTP_FROM	❌	Domyślny email nadawcy
+KSEF_MASTER_URL	❌	URL zewnętrznego API fakturowania
+KSEF_MASTER_API_KEY	❌	Klucz API zewnętrznego fakturowania
+CRON_SECRET	❌	Sekret do uwierzytelniania cron jobów
+Zobacz .env.example dla pełnego szablonu.
 
 📡 Przegląd API
 Base URL: /api
 
 Endpoint	Metody	Opis
+/health	GET	Health check + status DB
 /auth	POST	Login, rejestracja, odświeżanie tokenu
-/clients	GET, POST, PUT, DELETE	Zarządzanie klientami
-/offers	GET, POST, PUT, DELETE	CRUD ofert + publikacja
-/offers/:id/pdf	GET	Generowanie PDF
-/offers/:id/analytics	GET	Liczba wyświetleń, interakcje
-/contracts	GET, POST, PUT, DELETE	Zarządzanie umowami
-/contracts/:id/pdf	GET	Generowanie PDF z podpisem
+/clients	GET POST PUT DELETE	Zarządzanie klientami
+/offers	GET POST PUT DELETE	CRUD ofert + publikacja
+/offers/:id/pdf	GET	Generowanie PDF oferty
+/offers/:id/analytics	GET	Wyświetlenia i interakcje
+/contracts	GET POST PUT DELETE	Zarządzanie umowami
+/contracts/:id/pdf	GET	PDF umowy z podpisem
 /ai/chat	POST	Chat z asystentem AI
 /ai/generate-offer	POST	Generowanie oferty z opisu
 /ai/price-insight	POST	Rekomendacja cenowa
 /ai/insights	GET	Lista analiz post-mortem
-/emails	GET, POST	Logi i szablony emaili
-/offer-templates	GET, POST, PUT, DELETE	Szablony ofert wielokrotnego użytku
+/emails	GET POST	Logi i kompozytor emaili
+/offer-templates	GET POST PUT DELETE	Szablony ofert
 /ksef	POST	Wywołanie zewnętrznej faktury
-/public/offers/:token	GET, POST	Publiczny widok i akceptacja oferty
-/public/contracts/:token	GET, POST	Publiczny widok i podpis umowy
+/public/offers/:token	GET POST	Publiczny widok i akceptacja oferty
+/public/contracts/:token	GET POST	Publiczny widok i podpis umowy
 Format odpowiedzi:
 
 JSON
 
 {
   "success": true,
-  "data": { ... },
-  "meta": { "page": 1, "total": 50 }
+  "data": {},
+  "meta": { "page": 1, "limit": 10, "total": 50 }
 }
-🧪 Testy i CI/CD
+🧪 Testy
 Bash
 
-# Uruchom testy jednostkowe
-npm test
-
-# Z pokryciem kodu
-npm run test:coverage
-
-# Tryb watch
-npm run test:watch
-Pipeline CI/CD (GitHub Actions):
+npm test                   # uruchom testy jednostkowe
+npm run test:coverage      # z raportem pokrycia
+npm run test:watch         # tryb watch
+🔄 CI/CD
+Każdy push do master uruchamia pipeline:
 
 
-1. Push do main
-2. Uruchomienie testów Jest
-3. Sprawdzenie typów TypeScript
-4. Auto-deploy do Railway (jeśli testy przechodzą)
+Push do master → Testy Jest → Sprawdzenie TypeScript → Deploy do Railway
+Pipeline zdefiniowany w .github/workflows/ci.yml
+
 🎓 Czego się nauczyłem
-Budując ten projekt nauczyłem się:
-
-Clean Architecture w praktyce — separacja odpowiedzialności na dużą skalę
-Optymalizacja wydajności — cache auth zredukował zapytania DB o 80%
-Integracja AI — obsługa streaming responses, prompt engineering
-Wzorce produkcyjne — strukturalne logowanie, obsługa błędów, graceful shutdowns
-Projektowanie bazy danych — 15 modeli Prisma ze złożonymi relacjami i indeksami
-Bezpieczeństwo — JWT auth, hashowanie SHA-256, walidacja wejścia z Zod
+Clean Architecture w praktyce — ścisła separacja odpowiedzialności w 100+ plikach
+Optymalizacja wydajności — Cache auth zredukował zapytania DB o ~80%
+Integracja AI — Prompt engineering, historia konwersacji, streaming z Gemini
 Generowanie PDF — Własny silnik renderowania z obsługą fontów UTF-8
-CI/CD — Zautomatyzowany pipeline testowania i deploymentu
-📄 Licencja
-Proprietary — Wszelkie prawa zastrzeżone. Może zostać skomercjalizowana w przyszłości.
-
+Projektowanie bazy danych — 15 modeli Prisma, złożone relacje, indeksy wydajności
+Bezpieczeństwo — JWT auth, hashowanie SHA-256, walidacja wejścia z Zod
+Wzorce produkcyjne — Strukturalne logowanie (Pino), graceful shutdowns, error boundaries
 🔗 Linki
 Repozytorium Frontend: github.com/Shellty-IT/SmartQuote-AI
 Aplikacja na żywo: smartquote-ai.netlify.app
-Autor: Twój profil GitHub
-<div align="center">
-Zbudowane z ❤️ używając TypeScript, Express.js i Google Gemini AI
+📄 Licencja
+Proprietary — Wszelkie prawa zastrzeżone. Może zostać skomercjalizowana w przyszłości.
 
-</div> 
+Zbudowane w TypeScript · Express.js · PostgreSQL · Google Gemini AI

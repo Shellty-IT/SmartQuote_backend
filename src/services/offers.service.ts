@@ -7,7 +7,7 @@ import { offersRepository, OfferItemData, UpdateOfferData } from '../repositorie
 import { CreateOfferInput, UpdateOfferInput, OfferItemInput } from '../types';
 import { generateOfferNumber } from '../utils/offerNumber';
 import { emailService } from './email';
-import { getDecryptedSmtpConfig } from './settings.service';
+import { getEffectiveSmtpConfig } from './settings.service';
 import { buildItemWithTotals, calculateOfferTotals, ItemWithTotals } from './shared/offer-calculations';
 import { triggerPostMortem } from './shared/postmortem.utils';
 import { NotFoundError, ValidationError, ExternalServiceError } from '../errors/domain.errors';
@@ -303,7 +303,7 @@ export class OffersService {
             throw new ValidationError('Klient nie ma podanego adresu email');
         }
 
-        const smtpConfig = await getDecryptedSmtpConfig(userId);
+        const smtpConfig = await getEffectiveSmtpConfig(userId);
         if (!smtpConfig) {
             throw new ValidationError('Skonfiguruj skrzynkę pocztową w ustawieniach');
         }

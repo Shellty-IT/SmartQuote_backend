@@ -50,11 +50,12 @@ export class EmailSender {
         const transporter = this.createTransporter(smtpConfig);
         try {
             await transporter.sendMail({
-                from: smtpConfig.from || smtpConfig.user,
+                from: smtpConfig.from,
+                replyTo: smtpConfig.replyTo,
                 ...options,
             });
             return true;
-        } catch (error: unknown) {
+        } catch {
             return false;
         } finally {
             transporter.close();

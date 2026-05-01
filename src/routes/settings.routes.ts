@@ -1,4 +1,4 @@
-// smartquote_backend/src/routes/settings.routes.ts
+// src/routes/settings.routes.ts
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validate';
@@ -26,6 +26,9 @@ router.get('/api-keys', settingsController.getApiKeys);
 router.post('/api-keys', validate(v.createApiKeySchema), settingsController.createApiKey);
 router.patch('/api-keys/:id/toggle', settingsController.toggleApiKey);
 router.delete('/api-keys/:id', settingsController.deleteApiKey);
+
+router.get('/sender-email', settingsController.getSenderEmail);
+router.put('/sender-email', settingsController.updateSenderEmail);
 
 router.get('/smtp', settingsController.getSmtpConfig);
 router.put('/smtp', validate(v.updateSmtpConfigSchema), settingsController.updateSmtpConfig);
