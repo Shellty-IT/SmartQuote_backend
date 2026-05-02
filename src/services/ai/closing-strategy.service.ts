@@ -107,7 +107,7 @@ export class ClosingStrategyService {
             quickClose: {
                 title: 'Szybkie domknięcie',
                 description: 'Zaproponuj zachętę do szybkiej decyzji.',
-                suggestedResponse: `W związku z naszą ofertą "${offerNumber}" — mogę zaproponować specjalne warunki przy decyzji do końca tygodnia. Czy jest to realne z Państwa strony?`,
+                suggestedResponse: `W związku z naszą ofertą "${offerNumber}" - mogę zaproponować specjalne warunki przy decyzji do końca tygodnia. Czy jest to realne z Państwa strony?`,
                 maxDiscountPercent: 5,
             },
             contextSummary,

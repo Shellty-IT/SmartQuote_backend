@@ -80,7 +80,7 @@ const baseTemplate = (content: string) => `<!DOCTYPE html>
 </td></tr>
 <tr><td style="padding:32px 32px 24px;">${content}</td></tr>
 <tr><td style="padding:20px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;">
-<p style="margin:0;color:#94a3b8;font-size:12px;">SmartQuote AI — Inteligentne zarządzanie ofertami</p>
+<p style="margin:0;color:#94a3b8;font-size:12px;">SmartQuote AI - Inteligentne zarządzanie ofertami</p>
 </td></tr>
 </table>
 </td></tr>
@@ -246,7 +246,7 @@ ${ctaButton(url, 'Zobacz szczegóły →')}`);
 </table>
 ${ctaButton(url, 'Odpowiedz →')}`);
         return {
-            subject: `Nowy komentarz od ${data.clientName} — oferta ${data.offerNumber}`,
+            subject: `Nowy komentarz od ${data.clientName} - oferta ${data.offerNumber}`,
             html,
         };
     },
@@ -273,7 +273,7 @@ Na stronie oferty możesz przeglądać pozycje, wybierać opcje, zadawać pytani
 </p>
 ${sellerSignature(data.sellerName, data.companyName)}`);
         return {
-            subject: `Oferta ${data.offerNumber} — ${data.offerTitle} | ${senderLabel}`,
+            subject: `Oferta ${data.offerNumber} - ${data.offerTitle} | ${senderLabel}`,
             html,
         };
     },
@@ -305,7 +305,7 @@ ${infoRow('Data akceptacji', formatDateTime(data.acceptedAt))}
 </table>
 <p style="color:#64748b;font-size:12px;line-height:1.6;margin:16px 0 0;">
 Ten hash jest unikalnym odciskiem cyfrowym treści oferty w momencie akceptacji.
-Każda zmiana w treści oferty spowodowałaby wygenerowanie innego hasha — co potwierdza,
+Każda zmiana w treści oferty spowodowałaby wygenerowanie innego hasha - co potwierdza,
 że dokument nie został zmodyfikowany po akceptacji.
 </p>
 ${ctaButton(data.publicUrl, 'Zobacz ofertę i pobierz PDF →')}
@@ -335,7 +335,7 @@ ${infoRow('Data podpisu', formatDateTime(data.signedAt))}
 </table>
 <p style="color:#64748b;font-size:12px;line-height:1.6;margin:16px 0 0;">
 Ten hash jest unikalnym odciskiem cyfrowym treści umowy w momencie podpisu.
-Każda zmiana w treści umowy spowodowałaby wygenerowanie innego hasha — co potwierdza,
+Każda zmiana w treści umowy spowodowałaby wygenerowanie innego hasha - co potwierdza,
 że dokument nie został zmodyfikowany po podpisaniu.
 </p>
 ${ctaButtonEmerald(data.publicUrl, 'Zobacz umowę i pobierz PDF →')}

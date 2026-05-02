@@ -27,7 +27,7 @@ export class EmailTemplateBuilder {
 </td></tr>
 <tr><td style="padding:32px 32px 24px;">${content}</td></tr>
 <tr><td style="padding:20px 32px;background:#f8fafc;border-top:1px solid ${this.baseStyles.border};text-align:center;">
-<p style="margin:0;color:${this.baseStyles.textMuted};font-size:12px;">SmartQuote AI — Inteligentne zarządzanie ofertami</p>
+<p style="margin:0;color:${this.baseStyles.textMuted};font-size:12px;">SmartQuote AI - Inteligentne zarządzanie ofertami</p>
 </td></tr>
 </table>
 </td></tr>

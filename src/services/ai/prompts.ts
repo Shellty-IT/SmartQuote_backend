@@ -198,7 +198,7 @@ export interface ObserverPromptData {
 export function buildObserverPrompt(data: ObserverPromptData): string {
     return `Przeanalizuj zachowanie klienta na interaktywnej ofercie i określ jego intencje zakupowe.
 
-OFERTA: ${data.offerNumber} — ${data.offerTitle}
+OFERTA: ${data.offerNumber} - ${data.offerTitle}
 KLIENT: ${data.clientName}${data.clientCompany ? ` (${data.clientCompany})` : ''}, typ: ${data.clientType}
 WARTOŚĆ: ${data.totalGross} PLN brutto
 STATUS: ${data.statusLabel}
@@ -242,7 +242,7 @@ export interface ClosingStrategyPromptData {
 export function buildClosingStrategyPrompt(data: ClosingStrategyPromptData): string {
     return `Na podstawie kontekstu oferty i zachowań klienta, wygeneruj 3 strategie negocjacyjne.
 
-OFERTA: ${data.offerNumber} — ${data.offerTitle}
+OFERTA: ${data.offerNumber} - ${data.offerTitle}
 KLIENT: ${data.clientName}${data.clientCompany ? ` (${data.clientCompany})` : ''}, typ: ${data.clientType}
 WARTOŚĆ: ${data.totalGross} PLN brutto
 
@@ -304,9 +304,9 @@ export interface PostMortemPromptData {
 export function buildPostMortemPrompt(data: PostMortemPromptData): string {
     return `Przeanalizuj zakończoną ofertę handlową i wyciągnij wnioski na przyszłość.
 
-OFERTA: ${data.offerNumber} — ${data.offerTitle}
+OFERTA: ${data.offerNumber} - ${data.offerTitle}
 WYNIK: ${data.outcome === 'ACCEPTED' ? 'ZAAKCEPTOWANA' : 'ODRZUCONA'}
-KLIENT: ${data.clientName}${data.clientCompany ? ` (${data.clientCompany})` : ''} — typ: ${data.clientType}
+KLIENT: ${data.clientName}${data.clientCompany ? ` (${data.clientCompany})` : ''} - typ: ${data.clientType}
 WARTOŚĆ: ${data.totalGross} PLN brutto
 
 ${data.variantBlock}
@@ -328,7 +328,7 @@ Zwróć TYLKO JSON (bez markdown):
 {
   "summary": "Krótkie 2-3 zdaniowe podsumowanie co się wydarzyło",
   "keyLessons": ["Lekcja 1", "Lekcja 2"],
-  "pricingInsight": "Wnioski dotyczące wyceny — czy ceny były adekwatne",
+  "pricingInsight": "Wnioski dotyczące wyceny - czy ceny były adekwatne",
   "improvementSuggestions": ["Sugestia 1", "Sugestia 2"],
   "industryNote": "Obserwacja dot. branży lub typu klienta",
   "variantInsight": "Jeśli oferta ma warianty: wnioski o wyborze wariantu i rekomendacje jak to wykorzystać"

@@ -37,7 +37,7 @@ export function buildHtmlBody(body: string): string {
 <div style="color:#334155;font-size:14px;line-height:1.7;">${body.replace(/\n/g, '<br/>')}</div>
 </td></tr>
 <tr><td style="padding:20px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;">
-<p style="margin:0;color:#94a3b8;font-size:12px;">SmartQuote AI — Inteligentne zarządzanie ofertami</p>
+<p style="margin:0;color:#94a3b8;font-size:12px;">SmartQuote AI - Inteligentne zarządzanie ofertami</p>
 </td></tr>
 </table>
 </td></tr>

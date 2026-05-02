@@ -130,7 +130,7 @@ function createTestContract(overrides: Record<string, unknown> = {}) {
     };
 }
 
-describe('PDFService — generateOfferPDF', () => {
+describe('PDFService - generateOfferPDF', () => {
     it('returns a valid PDF buffer', async () => {
         const offer = createTestOffer();
         const buffer = await pdfService.generateOfferPDF(offer as never);
@@ -278,7 +278,7 @@ describe('PDFService — generateOfferPDF', () => {
     });
 });
 
-describe('PDFService — generateContractPDF', () => {
+describe('PDFService - generateContractPDF', () => {
     it('returns a valid PDF buffer', async () => {
         const contract = createTestContract();
         const buffer = await pdfService.generateContractPDF(contract as never);

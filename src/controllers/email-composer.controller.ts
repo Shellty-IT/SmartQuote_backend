@@ -16,7 +16,7 @@ export const emailComposerController = {
                     data: {
                         id: result.id,
                         status: result.status,
-                        warning: 'Wiadomość nie została wysłana — sprawdź konfigurację SMTP',
+                        warning: 'Wiadomość nie została wysłana - sprawdź konfigurację SMTP',
                         errorDetail: result.errorMessage,
                     },
                 });

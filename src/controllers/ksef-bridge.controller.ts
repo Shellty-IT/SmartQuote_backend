@@ -48,12 +48,12 @@ export class KsefBridgeController {
                     },
                     SELLER_NIP_MISSING: {
                         code: 'SELLER_NIP_MISSING',
-                        message: 'Brak NIP sprzedawcy — uzupełnij dane firmy w ustawieniach',
+                        message: 'Brak NIP sprzedawcy - uzupełnij dane firmy w ustawieniach',
                         status: 400,
                     },
                     BUYER_NIP_MISSING: {
                         code: 'BUYER_NIP_MISSING',
-                        message: 'Brak NIP nabywcy — uzupełnij dane klienta',
+                        message: 'Brak NIP nabywcy - uzupełnij dane klienta',
                         status: 400,
                     },
                     NO_ITEMS: {

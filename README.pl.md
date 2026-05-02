@@ -4,7 +4,7 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/Shellty-IT/SmartQuote-AI/master/public/favicon.svg" alt="SmartQuote AI" width="100" height="100">
 
-# SmartQuote AI — Backend
+# SmartQuote AI - Backend
 
 **Backend CRM z AI zbudowany w TypeScript, Express.js i Google Gemini**
 
@@ -37,15 +37,15 @@ RESTful API backend dla systemu CRM sprzedażowego z funkcjami AI. Obsługuje kl
 | **Walidacja** | Zod | Runtime schema validation |
 | **Logowanie** | Pino | Strukturalne logi JSON |
 | **Testy** | Jest | Testy jednostkowe logiki biznesowej |
-| **CI/CD** | GitHub Actions | Auto-deploy do Railway przy push |
-| **Deployment** | Railway | PostgreSQL bez konfiguracji + auto-scaling |
+| **CI/CD** | GitHub Actions | Auto-deploy do Render przy push |
+| **Deployment** | Render | PostgreSQL bez konfiguracji + auto-scaling |
 
 ---
 
 
 ## 🏗️ Architektura
 
-**Clean Architecture** — ścisła separacja odpowiedzialności:
+**Clean Architecture** - ścisła separacja odpowiedzialności:
 
 **Przepływ żądania:**
 Klient → Middleware → Controller → Service → Repository → Baza danych
@@ -59,30 +59,30 @@ Zewnętrzne API (Gemini, PDFKit, SMTP)
 | Warstwa | Odpowiedzialność | Zasady |
 |---------|------------------|--------|
 | **Middleware** | Zagadnienia przekrojowe | Cache auth (5min TTL), walidacja Zod, logowanie Pino |
-| **Controller** | Interfejs HTTP | Tylko `try/catch + next(err)` — **zero logiki biznesowej** |
+| **Controller** | Interfejs HTTP | Tylko `try/catch + next(err)` - **zero logiki biznesowej** |
 | **Service** | Logika biznesowa | Reguły domenowe, kalkulacje, orkiestracja repozytoriów i zewnętrznych API |
-| **Repository** | Dostęp do danych | Tylko zapytania Prisma, zwraca surowe dane — **zero logiki** |
+| **Repository** | Dostęp do danych | Tylko zapytania Prisma, zwraca surowe dane - **zero logiki** |
 | **Serwisy zewnętrzne** | Integracje third-party | Google Gemini AI, PDFKit (generowanie PDF), Nodemailer (SMTP) |
 
 **Kluczowe zasady:**
-- Controllery są **głupie** — tylko przekazują błędy do globalnego handlera
-- Serwisy są **mądre** — cała logika domenowa tu się znajduje
-- Repozytoria są **czyste** — bez logiki biznesowej, tylko zapytania do bazy
+- Controllery są **głupie** - tylko przekazują błędy do globalnego handlera
+- Serwisy są **mądre** - cała logika domenowa tu się znajduje
+- Repozytoria są **czyste** - bez logiki biznesowej, tylko zapytania do bazy
 - Cache auth redukuje obciążenie DB o ~80% na żądaniach wymagających uwierzytelnienia
 
 ## 📁 Struktura Projektu
 
 | Katalog | Zawartość |
 |---------|-----------|
-| `src/controllers/` | Handlery żądań HTTP — 14 kontrolerów |
+| `src/controllers/` | Handlery żądań HTTP - 14 kontrolerów |
 | `src/services/ai/` | Modułowe serwisy AI (chat, analiza, price insight, observer, closing strategy, feedback loop) |
 | `src/services/pdf/` | Silnik renderowania PDF (oferta, umowa, podpis, certyfikat) |
 | `src/services/email/` | Wysyłanie emaili, szablony, załączniki |
 | `src/services/shared/` | Współdzielone kalkulacje i narzędzia |
-| `src/repositories/` | Zapytania Prisma do bazy — 7 repozytoriów |
-| `src/routes/` | Definicje tras Express — 14 plików route |
+| `src/repositories/` | Zapytania Prisma do bazy - 7 repozytoriów |
+| `src/routes/` | Definicje tras Express - 14 plików route |
 | `src/middleware/` | Auth (JWT + cache), walidacja Zod, globalny error handler |
-| `src/validators/` | Schematy Zod dla walidacji żądań — 11 walidatorów |
+| `src/validators/` | Schematy Zod dla walidacji żądań - 11 walidatorów |
 | `src/lib/` | Prisma client, Pino logger, cache auth (5min TTL) |
 | `src/types/` | Definicje typów TypeScript |
 | `src/utils/` | Helpery API response, kalkulacje, crypto, numeracja ofert |
@@ -90,38 +90,38 @@ Zewnętrzne API (Gemini, PDFKit, SMTP)
 | `src/config/` | Centralna konfiguracja aplikacji |
 | `src/__tests__/` | Testy jednostkowe Jest |
 | `prisma/` | Schema (15 modeli) + historia migracji |
-| `fonts/` | DejaVu Sans TTF — obsługa UTF-8 dla polskich znaków w PDF |
+| `fonts/` | DejaVu Sans TTF - obsługa UTF-8 dla polskich znaków w PDF |
 
 ---
 
 ## ✨ Co zbudowałem
 
 ### Podstawowy CRM
-- **Zarządzanie klientami** — Firmy i osoby prywatne z historią kontaktów
-- **Cykl życia oferty** — 7 statusów: DRAFT → SENT → VIEWED → ACCEPTED / REJECTED
-- **Workflow umów** — DRAFT → PENDING_SIGNATURE → ACTIVE → COMPLETED
-- **System follow-upów** — Automatyczne przypomnienia emailowe dla zaległych zadań
-- **Analityka dashboard** — Metryki sprzedaży i współczynniki konwersji
+- **Zarządzanie klientami** - Firmy i osoby prywatne z historią kontaktów
+- **Cykl życia oferty** - 7 statusów: DRAFT → SENT → VIEWED → ACCEPTED / REJECTED
+- **Workflow umów** - DRAFT → PENDING_SIGNATURE → ACTIVE → COMPLETED
+- **System follow-upów** - Automatyczne przypomnienia emailowe dla zaległych zadań
+- **Analityka dashboard** - Metryki sprzedaży i współczynniki konwersji
 
 ### Funkcje AI (Google Gemini 2.5 Flash)
-- **Asystent Chat** — Interfejs języka naturalnego dla operacji CRM
-- **Generator ofert** — Tworzenie ofert z opisów tekstowych
-- **Price Insight** — Rekomendacje cenowe oparte na rynku
-- **Tryb Observer** — Analiza wydajności ofert w czasie rzeczywistym
-- **Strategia zamknięcia** — Sugestie AI do finalizacji transakcji
-- **Feedback Loop** — Analiza post-mortem wygranych/przegranych ofert
+- **Asystent Chat** - Interfejs języka naturalnego dla operacji CRM
+- **Generator ofert** - Tworzenie ofert z opisów tekstowych
+- **Price Insight** - Rekomendacje cenowe oparte na rynku
+- **Tryb Observer** - Analiza wydajności ofert w czasie rzeczywistym
+- **Strategia zamknięcia** - Sugestie AI do finalizacji transakcji
+- **Feedback Loop** - Analiza post-mortem wygranych/przegranych ofert
 
 ### Generowanie dokumentów
-- **Silnik PDF** — Własny renderer z DejaVu Sans (polskie znaki UTF-8)
-- **Dynamiczny branding** — Logo i kolor główny per użytkownik w PDF
-- **Kalkulacje VAT** — Automatyczne liczenie podatku per pozycja
-- **Certyfikaty akceptacji** — Audit trail z podpisem SHA-256 w PDF
+- **Silnik PDF** - Własny renderer z DejaVu Sans (polskie znaki UTF-8)
+- **Dynamiczny branding** - Logo i kolor główny per użytkownik w PDF
+- **Kalkulacje VAT** - Automatyczne liczenie podatku per pozycja
+- **Certyfikaty akceptacji** - Audit trail z podpisem SHA-256 w PDF
 
 ### Integracje
-- **KSeF Bridge** — Webhook zewnętrznego systemu fakturowania
-- **Email Composer** — Emaile HTML z załącznikami PDF przez Nodemailer
-- **Publiczne strony ofert** — Linki z tokenem i wyborem wariantów
-- **Podpisy elektroniczne** — Podpis canvas z weryfikacją kryptograficzną
+- **KSeF Bridge** - Webhook zewnętrznego systemu fakturowania
+- **Email Composer** - Emaile HTML z załącznikami PDF przez Nodemailer
+- **Publiczne strony ofert** - Linki z tokenem i wyborem wariantów
+- **Podpisy elektroniczne** - Podpis canvas z weryfikacją kryptograficzną
 
 ---
 
@@ -200,23 +200,23 @@ npm run test:coverage      # z raportem pokrycia
 npm run test:watch         # tryb watch
 🔄 CI/CD
 Każdy push do master uruchamia pipeline:
-
-
-Push do master → Testy Jest → Sprawdzenie TypeScript → Deploy do Railway
+ 
+ 
+Push do master → Testy Jest → Sprawdzenie TypeScript → Deploy do Render
 Pipeline zdefiniowany w .github/workflows/ci.yml
 
 🎓 Czego się nauczyłem
-Clean Architecture w praktyce — ścisła separacja odpowiedzialności w 100+ plikach
-Optymalizacja wydajności — Cache auth zredukował zapytania DB o ~80%
-Integracja AI — Prompt engineering, historia konwersacji, streaming z Gemini
-Generowanie PDF — Własny silnik renderowania z obsługą fontów UTF-8
-Projektowanie bazy danych — 15 modeli Prisma, złożone relacje, indeksy wydajności
-Bezpieczeństwo — JWT auth, hashowanie SHA-256, walidacja wejścia z Zod
-Wzorce produkcyjne — Strukturalne logowanie (Pino), graceful shutdowns, error boundaries
+Clean Architecture w praktyce - ścisła separacja odpowiedzialności w 100+ plikach
+Optymalizacja wydajności - Cache auth zredukował zapytania DB o ~80%
+Integracja AI - Prompt engineering, historia konwersacji, streaming z Gemini
+Generowanie PDF - Własny silnik renderowania z obsługą fontów UTF-8
+Projektowanie bazy danych - 15 modeli Prisma, złożone relacje, indeksy wydajności
+Bezpieczeństwo - JWT auth, hashowanie SHA-256, walidacja wejścia z Zod
+Wzorce produkcyjne - Strukturalne logowanie (Pino), graceful shutdowns, error boundaries
 🔗 Linki
 Repozytorium Frontend: github.com/Shellty-IT/SmartQuote-AI
 Aplikacja na żywo: smartquote-ai.netlify.app
 📄 Licencja
-Proprietary — Wszelkie prawa zastrzeżone. Może zostać skomercjalizowana w przyszłości.
+Proprietary - Wszelkie prawa zastrzeżone. Może zostać skomercjalizowana w przyszłości.
 
 Zbudowane w TypeScript · Express.js · PostgreSQL · Google Gemini AI
