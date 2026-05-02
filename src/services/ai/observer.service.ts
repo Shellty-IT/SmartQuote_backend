@@ -183,7 +183,7 @@ export class ObserverService {
                 interactions
                     .slice(0, 30)
                     .map((i) => {
-                        const details = i.details ? ` — ${JSON.stringify(i.details)}` : '';
+                        const details = i.details ? ` - ${JSON.stringify(i.details)}` : '';
                         return `${i.type} @ ${i.createdAt.toISOString()}${details}`;
                     })
                     .join('\n') || 'Brak interakcji',

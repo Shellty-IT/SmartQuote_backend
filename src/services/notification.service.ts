@@ -121,7 +121,7 @@ class NotificationService {
                 userId,
                 type: 'OFFER_VIEWED',
                 title: 'Klient otworzył ofertę',
-                message: `${data.clientName} wyświetlił ofertę ${data.offerNumber} — ${data.offerTitle}`,
+                message: `${data.clientName} wyświetlił ofertę ${data.offerNumber} - ${data.offerTitle}`,
                 link: `/dashboard/offers/${data.offerId}`,
                 metadata: { offerId: data.offerId, offerNumber: data.offerNumber },
             });
@@ -140,7 +140,7 @@ class NotificationService {
                 userId,
                 type: 'OFFER_ACCEPTED',
                 title: 'Oferta zaakceptowana! 🎉',
-                message: `${data.clientName} zaakceptował ofertę ${data.offerNumber} — ${data.offerTitle}`,
+                message: `${data.clientName} zaakceptował ofertę ${data.offerNumber} - ${data.offerTitle}`,
                 link: `/dashboard/offers/${data.offerId}`,
                 metadata: {
                     offerId: data.offerId,
@@ -171,7 +171,7 @@ class NotificationService {
                 userId,
                 type: 'OFFER_REJECTED',
                 title: 'Oferta odrzucona',
-                message: `${data.clientName} odrzucił ofertę ${data.offerNumber} — ${data.offerTitle}` +
+                message: `${data.clientName} odrzucił ofertę ${data.offerNumber} - ${data.offerTitle}` +
                     `${data.reason ? `. Powód: ${data.reason}` : ''}`,
                 link: `/dashboard/offers/${data.offerId}`,
                 metadata: {
